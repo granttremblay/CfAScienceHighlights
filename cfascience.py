@@ -1,10 +1,11 @@
 import requests
+import os
 from openai import OpenAI
 
 
 # Set your NASA ADS API token and OpenAI API key
-ADS_API_TOKEN = "zy2Hsn1xhNe5ArhGRMPT0yUmlYRWmOtCrCxvqMIe"
-OPENAI_API_KEY = "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"
+ADS_API_TOKEN = os.getenv("ADS_API_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 # Only query for refereed articles by adding 'property:refereed' to the query
 
 client = OpenAI(api_key=OPENAI_API_KEY)
