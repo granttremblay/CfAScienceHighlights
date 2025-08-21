@@ -1,11 +1,20 @@
 import requests
 import os
 from openai import OpenAI
+from dotenv import load_dotenv
 
+
+# This code will only run if you point to a .env file *WHICH YOU DO NOT TRACK IN GITHUB! KEEP IT SECRET!*
+# contents of this .env file should look like
+# OPENAI_API_KEY = <your_openai_api_key>
+# ADS_API_TOKEN = <your_ads_api_token>
+
+load_dotenv('api_keys.env')
 
 # Set your NASA ADS API token and OpenAI API key
 ADS_API_TOKEN = os.getenv("ADS_API_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
 # Only query for refereed articles by adding 'property:refereed' to the query
 
 client = OpenAI(api_key=OPENAI_API_KEY)

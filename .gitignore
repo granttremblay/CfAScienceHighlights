@@ -1,3 +1,6 @@
+# Ignore the SECRET API key .env file
+api_keys.env 
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
