@@ -24,7 +24,7 @@ Use at your own risk, manually pick a great figure from the paper, and carefully
 
 4. Create a file called `api_keys.env` in the root directory of the project and add both a NASA ADS and OpenAI API key to it. The file contents should look like this:
 
-    ```bash
+    ```python
     NASA_ADS_API_KEY=your_nasa_ads_api_key
     OPENAI_API_KEY=your_openai_api_key
     ```
@@ -39,6 +39,18 @@ To run the script, use the following command:
 ```bash
 python cfascience.py
 ```
+
+## Screenshots
+
+
+After running `python cfascience.py`, the user should see something like this:
+
+![Screenshot of the script in action](screenshots/1.png)
+
+When the user then enters a comma-separated list of the abstracts to summarize (e.g. `3,4,8`), you will see something that looks like this:
+![Screenshot of the script in action](screenshots/2.png)
+
+The user may enter `n` should they not wish to see any summaries, and instead cleanly exit the script.
 
 ### Options (yet to come)
 
