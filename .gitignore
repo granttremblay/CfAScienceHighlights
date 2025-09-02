@@ -1,5 +1,13 @@
 # Ignore the SECRET API key .env file
 api_keys.env 
+<<<<<<< HEAD
+<<<<<<< HEAD
+credentials.json
+token.json
+=======
+>>>>>>> parent of 22bb639 (a major update that includes command line argument customization)
+=======
+>>>>>>> parent of 22bb639 (a major update that includes command line argument customization)
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
