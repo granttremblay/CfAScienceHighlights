@@ -35,10 +35,45 @@ Use at your own risk, manually pick a great figure from the paper, and carefully
 
 ## Usage
 
-To run the script, use the following command:
+### Basic Usage
 ```bash
 python cfascience.py
 ```
+
+### Command Line Options
+
+The script now supports command line arguments to customize search parameters:
+
+```bash
+# Default: CfA papers from 2025
+python cfascience.py
+
+# Search papers from a specific year
+python cfascience.py --start-year 2024
+
+# Search papers from a year range
+python cfascience.py --start-year 2023 --end-year 2024
+
+# Search papers from a custom affiliation (MIT example)
+python cfascience.py --affiliation 'aff:"MIT"'
+
+# Combine options: MIT papers from 2024-2025
+python cfascience.py --affiliation 'aff:"MIT"' --start-year 2024 --end-year 2025
+
+# Get help and see all options
+python cfascience.py --help
+```
+
+#### Available Options:
+- `--start-year YEAR`: Start year for search (default: 2025)
+- `--end-year YEAR`: End year for search (default: same as start year)
+- `--affiliation STRING`: Custom affiliation string in ADS query format (default: CfA/Smithsonian)
+
+#### Affiliation String Examples:
+- CfA/Smithsonian (default): `pos(aff:"02138",1) pos(aff:"Smithsonian",1)`
+- MIT: `aff:"MIT"`
+- Harvard: `aff:"Harvard"`
+- Multiple institutions: `aff:"MIT" OR aff:"Harvard"`
 
 ## Screenshots
 
@@ -52,6 +87,10 @@ When the user then enters a comma-separated list of the abstracts to summarize (
 
 The user may enter `n` should they not wish to see any summaries, and instead cleanly exit the script.
 
-### Options (yet to come)
+## Configuration Notes
 
-- I will add options to this code over time, but for now, a scrape from 2025 is hard-coded.
+The script now supports flexible configuration through command line arguments. Default values maintain backward compatibility:
+- **Default year**: 2025 
+- **Default affiliation**: CfA/Smithsonian affiliations
+- **Paper type**: Only refereed papers are included
+- **Result limit**: Maximum 10 most recent papers

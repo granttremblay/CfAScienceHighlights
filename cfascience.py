@@ -13,6 +13,7 @@ import sys
 import time
 import threading
 import itertools
+import argparse
 
 # Third-party imports
 import requests
@@ -53,17 +54,38 @@ ADS_HEADERS = {
     "Authorization": f"Bearer {ADS_API_TOKEN}"
 }
 
-# Query parameters
-# Search for articles with Smithsonian/Harvard CfA affiliations
-# Only get refereed articles from specified year
-QUERY = ('pos(aff:"02138",1) pos(aff:"Smithsonian",1) '
-         'year:2025 property:refereed')
-PARAMS = {
-    "q": QUERY,
-    "fl": "title,abstract,year,author,aff,journal,pub,pubdate",
-    "sort": "date desc",
-    "rows": 10
-}
+# Default query parameters - now handled dynamically in build_query()
+
+
+def build_query(affiliation_string=None, start_year=None, end_year=None):
+    """
+    Build the ADS query string with custom parameters.
+
+    Args:
+        affiliation_string: Custom affiliation string (default: CfA/Smithsonian)
+        start_year: Start year for search (default: 2025)
+        end_year: End year for search (default: same as start_year)
+
+    Returns:
+        str: The formatted query string
+    """
+    # Default affiliation string for CfA/Smithsonian
+    if affiliation_string is None:
+        affiliation_string = 'pos(aff:"02138",1) pos(aff:"Smithsonian",1)'
+
+    # Default year range
+    if start_year is None:
+        start_year = 2025
+    if end_year is None:
+        end_year = start_year
+
+    # Build year part of query
+    if start_year == end_year:
+        year_part = f'year:{start_year}'
+    else:
+        year_part = f'year:{start_year}-{end_year}'
+
+    return f'{affiliation_string} {year_part} property:refereed'
 
 
 def extract_authors_affiliations(doc):
@@ -172,17 +194,30 @@ def print_authors_affiliations(authors_affiliations):
                 print(f"    • {author_str}")
 
 
-def fetch_abstracts():
+def fetch_abstracts(affiliation_string=None, start_year=None, end_year=None):
     """
-    Fetch abstracts from NASA ADS API based on predefined query parameters.
+    Fetch abstracts from NASA ADS API with custom search parameters.
+
+    Args:
+        affiliation_string: Custom affiliation string (default: CfA/Smithsonian)
+        start_year: Start year for search (default: 2025)
+        end_year: End year for search (default: same as start_year)
 
     Returns:
         List of dictionaries containing abstract data
     """
+    query = build_query(affiliation_string, start_year, end_year)
+    params = {
+        "q": query,
+        "fl": "title,abstract,year,author,aff,journal,pub,pubdate",
+        "sort": "date desc",
+        "rows": 10
+    }
+
     response = requests.get(
         ADS_API_URL,
         headers=ADS_HEADERS,
-        params=PARAMS,
+        params=params,
         timeout=30
     )
     response.raise_for_status()
@@ -362,14 +397,65 @@ def summarize_abstracts(abstracts):
     return summaries
 
 
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Generate public-facing summaries of CfA research papers from NASA ADS",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s                                    # Default: CfA papers from 2025
+  %(prog)s --start-year 2024                 # CfA papers from 2024
+  %(prog)s --start-year 2023 --end-year 2024 # CfA papers from 2023-2024
+  %(prog)s --affiliation 'aff:"MIT"'          # MIT papers from 2025
+  %(prog)s --affiliation 'aff:"MIT"' --start-year 2024 --end-year 2025
+        """
+    )
+
+    parser.add_argument(
+        '--start-year',
+        type=int,
+        help='Start year for search (default: 2025)'
+    )
+
+    parser.add_argument(
+        '--end-year',
+        type=int,
+        help='End year for search (default: same as start year)'
+    )
+
+    parser.add_argument(
+        '--affiliation',
+        type=str,
+        help='Custom affiliation string in ADS query format (default: CfA/Smithsonian affiliations)'
+    )
+
+    return parser.parse_args()
+
+
 def main():
-    abstracts = fetch_abstracts()
+    args = parse_arguments()
+
+    # Pass the command line arguments to fetch_abstracts
+    abstracts = fetch_abstracts(
+        affiliation_string=args.affiliation,
+        start_year=args.start_year,
+        end_year=args.end_year
+    )
+
     if not abstracts:
         print("No abstracts found.")
         return
 
+    # Show what search parameters were used
+    year_display = f"{args.start_year or 2025}" + \
+        (f"-{args.end_year}" if args.end_year and args.end_year !=
+         (args.start_year or 2025) else "")
+    affiliation_display = "CfA-affiliated" if not args.affiliation else "custom affiliation"
+
     # Print a numbered list of the most recent 10 papers with title and author list
-    print("Most recent 10 papers from CfA-affiliated authors:")
+    print(
+        f"Most recent 10 papers from {affiliation_display} authors ({year_display}):")
     for idx, abs_data in enumerate(abstracts, 1):
         title = abs_data.get('title', '(no title)')
         print(f"{idx}. {Color.BOLD}{Color.CYAN}{title}{Color.END}")

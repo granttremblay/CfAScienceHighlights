@@ -20,7 +20,13 @@ pip install python-dotenv
 
 ### Running the Application
 ```bash
+# Default: CfA papers from 2025
 python cfascience.py
+
+# Custom year and affiliation examples
+python cfascience.py --start-year 2024
+python cfascience.py --affiliation 'aff:"MIT"' --start-year 2023 --end-year 2024
+python cfascience.py --help  # See all options
 ```
 
 ### Testing
