@@ -1,3 +1,5 @@
+![A wordmark that looks like the official CfA wordmark but instead says "CfA Science](cfa_science_logo.png)
+
 # CfA Science Highlights for the Public
 A script to scrape CfA-led papers from ADS and generate public-facing summaries of those results. This at least gives a decent starting point for newletter content, etc.
 
@@ -22,6 +24,11 @@ Use at your own risk, manually pick a great figure from the paper, and carefully
     pip install -r requirements.txt
     ```
 
+    **For Google Docs integration** (optional), also install:
+    ```bash
+    pip install -r requirements_google_docs.txt
+    ```
+
 4. Create a file called `api_keys.env` in the root directory of the project and add both a NASA ADS and OpenAI API key to it. The file contents should look like this:
 
     ```python
@@ -35,14 +42,27 @@ Use at your own risk, manually pick a great figure from the paper, and carefully
 
 ## Usage
 
-### Basic Usage
+The repository provides two main tools:
+
+### 1. Terminal Interface (`cfascience.py`)
+Interactive terminal tool for exploring and summarizing papers:
+
 ```bash
 python cfascience.py
 ```
 
-### Command Line Options
+### 2. Google Docs Integration (`create_google_doc.py`)
+Automatically generates a formatted Google Doc with all papers, abstracts, and AI summaries:
 
-The script now supports command line arguments to customize search parameters:
+```bash
+python create_google_doc.py
+```
+
+**First-time setup for Google Docs**: See [GOOGLE_DOCS_SETUP.md](GOOGLE_DOCS_SETUP.md) for complete setup instructions.
+
+### Command Line Options (cfascience.py only)
+
+The terminal script supports command line arguments to customize search parameters:
 
 ```bash
 # Default: CfA papers from 2025
@@ -75,6 +95,46 @@ python cfascience.py --help
 - Harvard: `aff:"Harvard"`
 - Multiple institutions: `aff:"MIT" OR aff:"Harvard"`
 
+## Google Docs Integration Features
+
+The `create_google_doc.py` script provides:
+
+### ✨ **Key Features**
+- **Static Document**: Creates a single Google Doc with a permanent URL that never changes
+- **Automatic Updates**: Each run clears and refreshes content with latest papers
+- **Complete Information**: Includes paper titles, authors, journals, publication dates, full abstracts, and AI-generated public summaries
+- **Professional Formatting**: Clean, readable layout with timestamp showing when content was generated
+- **NASA ADS Links**: Clickable links to search for each paper on NASA ADS
+
+### 📄 **Document Structure**
+```
+Recent CfA-affiliated Science Publications
+Generated on Tuesday, September 2, 2025 at 4:30PM
+
+Recent papers from CfA-affiliated authors (Top 10)
+
+1. Paper Title (Year)
+   Journal: Journal Name
+   Publication Date: Date
+   Authors: Author list
+   Link: [View on NASA ADS]
+
+   ABSTRACT:
+   [Full technical abstract]
+
+   PUBLIC SUMMARY:
+   [AI-generated 2-paragraph summary for general audience]
+
+   ────────────────────────────────────────────────
+   [Repeat for each paper...]
+```
+
+### 🔗 **Permanent Link Behavior**
+- **First run**: Creates new document, saves ID to `google_doc_config.txt`
+- **Subsequent runs**: Updates same document with fresh content
+- **Bookmarkable**: The URL remains the same forever - perfect for sharing with colleagues
+- **Version History**: Google Docs automatically maintains version history
+
 ## Screenshots
 
 
@@ -90,7 +150,13 @@ The user may enter `n` should they not wish to see any summaries, and instead cl
 ## Configuration Notes
 
 The script now supports flexible configuration through command line arguments. Default values maintain backward compatibility:
-- **Default year**: 2025 
+- **Default year**: 2025
 - **Default affiliation**: CfA/Smithsonian affiliations
 - **Paper type**: Only refereed papers are included
 - **Result limit**: Maximum 10 most recent papers
+
+
+&nbsp;
+
+
+![A wordmark that looks like the official CfA wordmark but instead says "CfA Science](cfa_logo.png)
