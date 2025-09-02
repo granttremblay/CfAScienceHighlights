@@ -91,7 +91,8 @@ def format_author_list(authors_affiliations):
     Format author list for initial display, highlighting CfA authors.
 
     Args:
-        authors_affiliations: List of dictionaries with author names and affiliations
+        authors_affiliations: List of dictionaries with author names and
+                             affiliations
 
     Returns:
         List of formatted strings ready for display
@@ -104,9 +105,7 @@ def format_author_list(authors_affiliations):
         aff = entry["affiliation"]
 
         # Check if this is a Smithsonian-affiliated author
-        smithsonian_keywords = ['smithsonian',
-                                'cfa', 'center for astrophysics']
-        if aff and any(s in aff.lower() for s in smithsonian_keywords):
+        if is_cfa_affiliated(aff):
             cfa_authors.append(author)
         else:
             other_authors.append(author)
@@ -137,15 +136,12 @@ def print_authors_affiliations(authors_affiliations):
     smithsonian_authors = []
     other_authors = []
 
-    # Check for Smithsonian-affiliated authors
-    smithsonian_keywords = ['smithsonian', 'cfa', 'center for astrophysics']
-
     for entry in authors_affiliations:
         author = entry["author"]
         aff = entry["affiliation"]
 
         # Check if this is a Smithsonian-affiliated author
-        if aff and any(s in aff.lower() for s in smithsonian_keywords):
+        if is_cfa_affiliated(aff):
             smithsonian_authors.append((author, aff))
         else:
             other_authors.append((author, aff))
@@ -208,6 +204,76 @@ def fetch_abstracts():
     return abstracts
 
 
+def is_cfa_affiliated(affiliation):
+    """
+    Check if an affiliation is Smithsonian-affiliated.
+
+    Args:
+        affiliation: Author affiliation string
+
+    Returns:
+        Boolean indicating if the affiliation is Smithsonian-affiliated
+    """
+    smithsonian_keywords = ['smithsonian', 'cfa', 'center for astrophysics']
+    has_keywords = affiliation and any(
+        s in affiliation.lower() for s in smithsonian_keywords
+    )
+    return has_keywords
+
+
+def summarize_abstracts(abstracts):
+    """
+    Generate public-facing summaries for abstracts using OpenAI's GPT model.
+
+    Displays a spinner animation while waiting for the API response.
+
+    Args:
+        abstracts: List of abstract data dictionaries
+
+    Returns:
+        List of dictionaries containing title, year, and summary
+    """
+    summaries = []
+
+    def spinner_running(stop_event):
+        """Display a spinning animation in the terminal while processing."""
+        spinner = itertools.cycle(['|', '/', '-', '\\'])
+        while not stop_event.is_set():
+            sys.stdout.write(f"\rGenerating summary... {next(spinner)}")
+            sys.stdout.flush()
+            time.sleep(0.1)
+        sys.stdout.write("\r" + " "*30 + "\r")  # Clear line
+
+    for abs_data in abstracts:
+        prompt = (
+            f"Title: {abs_data['title']} (Year: {abs_data['year']})\n"
+            f"Abstract: {abs_data['abstract']}\n\n"
+            "Write a public-facing summary in two paragraphs for a "
+            "general audience."
+        )
+        stop_event = threading.Event()
+        spinner_thread = threading.Thread(
+            target=spinner_running, args=(stop_event,))
+        spinner_thread.start()
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=400,
+                temperature=0.7
+            )
+        finally:
+            stop_event.set()
+            spinner_thread.join()
+        summary = response.choices[0].message.content.strip()
+        summaries.append({
+            "title": abs_data["title"],
+            "year": abs_data["year"],
+            "summary": summary
+        })
+    return summaries
+
+
 def main():
     """
     Main function to run the CfA Science Highlights program.
@@ -224,7 +290,21 @@ def main():
     print("Most recent 10 papers from CfA-affiliated authors:")
     for idx, abs_data in enumerate(abstracts, 1):
         title = abs_data.get('title', '(no title)')
-        print(f"{idx}. {Color.BOLD}{Color.CYAN}{title}{Color.END}")
+
+        # Check if first author is Smithsonian-affiliated
+        authors_affiliations = abs_data.get('authors_affiliations', [])
+        first_author_badge = ""
+        if authors_affiliations and len(authors_affiliations) > 0:
+            first_author = authors_affiliations[0]
+            if is_cfa_affiliated(first_author.get("affiliation", "")):
+                first_author_badge = (
+                    f" {Color.BOLD}[{Color.MAGENTA}CfA 1st Author"
+                    f"{Color.END}{Color.BOLD}]{Color.END}"
+                )
+
+        # Print title with optional first author badge
+        title_display = f"{idx}. {Color.BOLD}{Color.CYAN}{title}{Color.END}"
+        print(f"{title_display}{first_author_badge}")
 
         # Format and print authors with CfA authors highlighted
         author_lines = format_author_list(
@@ -305,127 +385,6 @@ def main():
             f"rewritten for a public audience:{Color.END}"
         )
         print(summary_header)
-        print(s['summary'])
-        print("\n" + "="*80 + "\n")
-
-
-def summarize_abstracts(abstracts):
-    """
-    Generate public-facing summaries for abstracts using OpenAI's GPT model.
-
-    Displays a spinner animation while waiting for the API response.
-
-    Args:
-        abstracts: List of abstract data dictionaries
-
-    Returns:
-        List of dictionaries containing title, year, and summary
-    """
-    summaries = []
-
-    def spinner_running(stop_event):
-        """Display a spinning animation in the terminal while processing."""
-        spinner = itertools.cycle(['|', '/', '-', '\\'])
-        while not stop_event.is_set():
-            sys.stdout.write(f"\rGenerating summary... {next(spinner)}")
-            sys.stdout.flush()
-            time.sleep(0.1)
-        sys.stdout.write("\r" + " "*30 + "\r")  # Clear line
-
-    for abs_data in abstracts:
-        prompt = (
-            f"Title: {abs_data['title']} (Year: {abs_data['year']})\n"
-            f"Abstract: {abs_data['abstract']}\n\n"
-            "Write a public-facing summary in two paragraphs for a "
-            "general audience."
-        )
-        stop_event = threading.Event()
-        spinner_thread = threading.Thread(
-            target=spinner_running, args=(stop_event,))
-        spinner_thread.start()
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=400,
-                temperature=0.7
-            )
-        finally:
-            stop_event.set()
-            spinner_thread.join()
-        summary = response.choices[0].message.content.strip()
-        summaries.append({
-            "title": abs_data["title"],
-            "year": abs_data["year"],
-            "summary": summary
-        })
-    return summaries
-
-
-def main():
-    abstracts = fetch_abstracts()
-    if not abstracts:
-        print("No abstracts found.")
-        return
-
-    # Print a numbered list of the most recent 10 papers with title and author list
-    print("Most recent 10 papers from CfA-affiliated authors:")
-    for idx, abs_data in enumerate(abstracts, 1):
-        title = abs_data.get('title', '(no title)')
-        print(f"{idx}. {Color.BOLD}{Color.CYAN}{title}{Color.END}")
-
-        # Format and print authors with CfA authors highlighted
-        author_lines = format_author_list(
-            abs_data.get('authors_affiliations', []))
-        for line in author_lines:
-            print(line)
-
-        print()  # Add an empty line between papers
-
-    # Ask user which abstracts to summarize
-    selection = input(
-        "\nEnter the numbers of the abstracts to summarize (comma-separated, e.g. 1,3,5) or 'n' to exit: ")
-
-    # Check if user wants to exit
-    if selection.lower().strip() == 'n':
-        print("Exiting without generating summaries.")
-        return
-
-    try:
-        selected_indices = [
-            int(x.strip())-1 for x in selection.split(',') if x.strip().isdigit()]
-    except Exception:
-        print("Invalid input. Exiting.")
-        return
-    selected_indices = [i for i in selected_indices if 0 <= i < len(abstracts)]
-    if not selected_indices:
-        print("No valid selections made. Exiting.")
-        return
-
-    selected_abstracts = [abstracts[i] for i in selected_indices]
-    summaries = summarize_abstracts(selected_abstracts)
-    for i, s in enumerate(summaries):
-        abs_data = selected_abstracts[i]
-        print(
-            f"\n{Color.BOLD}{Color.CYAN}Title: {s['title']}{Color.END} {Color.GREEN}(Year: {s['year']}){Color.END}")
-        journal = abs_data.get('journal')
-        publication = abs_data.get('publication')
-        if journal and publication and journal != publication:
-            print(
-                f"{Color.YELLOW}Journal:{Color.END} {journal}\n{Color.YELLOW}Publication:{Color.END} {publication}")
-        elif journal:
-            print(f"{Color.YELLOW}Journal:{Color.END} {journal}")
-        elif publication:
-            print(f"{Color.YELLOW}Publication:{Color.END} {publication}")
-        else:
-            print(f"{Color.YELLOW}Journal/Publication:{Color.END} (none)")
-        pubdate = abs_data.get('pubdate', '(unknown)')
-        print(f"{Color.YELLOW}Publication Date:{Color.END} {pubdate}")
-        authors_affiliations = abs_data.get("authors_affiliations", [])
-        print(f"{Color.YELLOW}Authors & Affiliations:{Color.END}")
-        print_authors_affiliations(authors_affiliations)
-        print()
-        print(f"{Color.BOLD}{Color.PURPLE}ChatGPT summary of abstract, rewritten for a public audience:{Color.END}")
         print(s['summary'])
         print("\n" + "="*80 + "\n")
 
