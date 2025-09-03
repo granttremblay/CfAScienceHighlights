@@ -235,8 +235,8 @@ class GoogleDocsCreator:
 
     def add_content_to_document(self, document_id, papers):
         """
-        Add paper content to the Google Doc with formatting and hyperlinks.
-        Includes abstracts and AI-generated public summaries.
+        Add paper content to the Google Doc with professional formatting and styling.
+        Includes abstracts and AI-generated public summaries with enhanced readability.
         
         Args:
             document_id: ID of the Google Doc to update
@@ -247,25 +247,82 @@ class GoogleDocsCreator:
             now = datetime.now()
             timestamp = now.strftime("Generated on %A, %B %d, %Y at %I:%M%p")
             
-            # Prepare the requests for batch update
+            # Insert content step by step to avoid Unicode position calculation issues
             requests = []
+            current_index = 1
             
-            # Add title and introduction
-            intro_text = f"Recent CfA-affiliated Science Publications\n"
-            intro_text += f"{timestamp}\n\n"
-            intro_text += f"Recent papers from CfA-affiliated authors (Top 10)\n\n"
-            
+            # Add title
+            title_text = "Recent CfA-affiliated Science Publications\n"
             requests.append({
                 'insertText': {
-                    'location': {'index': 1},
-                    'text': intro_text
+                    'location': {'index': current_index},
+                    'text': title_text
                 }
             })
             
-            # Keep track of current position in document
-            current_index = len(intro_text) + 1
+            # Format title (bold, large)
+            requests.append({
+                'updateTextStyle': {
+                    'range': {'startIndex': current_index, 'endIndex': current_index + len(title_text) - 1},
+                    'textStyle': {
+                        'bold': True,
+                        'fontSize': {'magnitude': 18, 'unit': 'PT'},
+                        'weightedFontFamily': {'fontFamily': 'Roboto', 'weight': 700}
+                    },
+                    'fields': 'bold,fontSize,weightedFontFamily'
+                }
+            })
+            current_index += len(title_text)
             
-            # Add each paper with abstracts and summaries
+            # Add timestamp
+            timestamp_text = timestamp + "\n\n"
+            requests.append({
+                'insertText': {
+                    'location': {'index': current_index},
+                    'text': timestamp_text
+                }
+            })
+            
+            # Format timestamp (italic, gray)
+            requests.append({
+                'updateTextStyle': {
+                    'range': {'startIndex': current_index, 'endIndex': current_index + len(timestamp)},
+                    'textStyle': {
+                        'italic': True,
+                        'fontSize': {'magnitude': 12, 'unit': 'PT'},
+                        'foregroundColor': {'color': {'rgbColor': {'red': 0.5, 'green': 0.5, 'blue': 0.5}}},
+                        'weightedFontFamily': {'fontFamily': 'Roboto', 'weight': 400}
+                    },
+                    'fields': 'italic,fontSize,foregroundColor,weightedFontFamily'
+                }
+            })
+            current_index += len(timestamp_text)
+            
+            # Add section header
+            section_text = "Recent papers from CfA-affiliated authors (Top 10)\n\n"
+            requests.append({
+                'insertText': {
+                    'location': {'index': current_index},
+                    'text': section_text
+                }
+            })
+            
+            # Format section header (bold, blue)
+            requests.append({
+                'updateTextStyle': {
+                    'range': {'startIndex': current_index, 'endIndex': current_index + len(section_text) - 3},
+                    'textStyle': {
+                        'bold': True,
+                        'fontSize': {'magnitude': 14, 'unit': 'PT'},
+                        'foregroundColor': {'color': {'rgbColor': {'red': 0.2, 'green': 0.4, 'blue': 0.8}}},
+                        'weightedFontFamily': {'fontFamily': 'Roboto', 'weight': 700}
+                    },
+                    'fields': 'bold,fontSize,foregroundColor,weightedFontFamily'
+                }
+            })
+            current_index += len(section_text)
+            
+            # Add each paper with step-by-step formatting
             for i, paper in enumerate(papers, 1):
                 title = paper.get('title', 'No title available')
                 year = paper.get('year', 'Unknown year')
@@ -277,60 +334,233 @@ class GoogleDocsCreator:
                 
                 print(f"Processing paper {i}: {title[:50]}..." if len(title) > 50 else f"Processing paper {i}: {title}")
                 
-                # Create the paper entry text
-                paper_text = f"{i}. {title}"
+                # Paper title
+                paper_title_text = f"{i}. {title}"
                 if year:
-                    paper_text += f" ({year})"
-                paper_text += "\n"
+                    paper_title_text += f" ({year})"
+                paper_title_text += "\n"
                 
-                # Add journal/publication info
+                requests.append({
+                    'insertText': {
+                        'location': {'index': current_index},
+                        'text': paper_title_text
+                    }
+                })
+                
+                # Format paper title (bold, larger)
+                title_end = current_index + len(paper_title_text) - 1
+                requests.append({
+                    'updateTextStyle': {
+                        'range': {'startIndex': current_index, 'endIndex': title_end},
+                        'textStyle': {
+                            'bold': True,
+                            'fontSize': {'magnitude': 13, 'unit': 'PT'},
+                            'foregroundColor': {'color': {'rgbColor': {'red': 0.1, 'green': 0.1, 'blue': 0.1}}},
+                            'weightedFontFamily': {'fontFamily': 'Roboto', 'weight': 700}
+                        },
+                        'fields': 'bold,fontSize,foregroundColor,weightedFontFamily'
+                    }
+                })
+                current_index += len(paper_title_text)
+                
+                # Publication details
+                details_text = ""
                 if journal:
-                    paper_text += f"   Journal: {journal}\n"
+                    details_text += f"Journal: {journal}\n"
                 elif publication:
-                    paper_text += f"   Publication: {publication}\n"
+                    details_text += f"Publication: {publication}\n"
                 
                 if pubdate and pubdate != 'Unknown date':
-                    paper_text += f"   Publication Date: {pubdate}\n"
+                    # Clean up pubdate formatting (remove -00 endings)
+                    clean_pubdate = pubdate.replace('-00', '').replace('--', '-')
+                    # Convert YYYY-MM to more readable format
+                    if len(clean_pubdate.split('-')) == 2:
+                        try:
+                            year, month = clean_pubdate.split('-')
+                            month_names = {
+                                '01': 'January', '02': 'February', '03': 'March',
+                                '04': 'April', '05': 'May', '06': 'June',
+                                '07': 'July', '08': 'August', '09': 'September',
+                                '10': 'October', '11': 'November', '12': 'December'
+                            }
+                            if month in month_names:
+                                clean_pubdate = f"{month_names[month]} {year}"
+                        except (ValueError, IndexError):
+                            pass  # Keep original format if parsing fails
+                    details_text += f"Publication Date: {clean_pubdate}\n"
                 
-                # Add authors (simplified format for Google Docs)
+                # Authors
                 if authors_affiliations:
                     authors = [entry["author"] for entry in authors_affiliations]
                     if len(authors) > 5:
-                        author_text = f"   Authors: {', '.join(authors[:3])}, et al. ({len(authors)} total authors)\n"
+                        author_text = f"Authors: {', '.join(authors[:3])}, et al. ({len(authors)} total authors)\n"
                     else:
-                        author_text = f"   Authors: {', '.join(authors)}\n"
-                    paper_text += author_text
+                        author_text = f"Authors: {', '.join(authors)}\n"
+                    details_text += author_text
                 
-                # Add NASA ADS link placeholder
-                paper_text += f"   Link: [View on NASA ADS]\n\n"
+                # NASA ADS link
+                ads_link_text = "[View on NASA ADS]"
+                details_text += f"Link: {ads_link_text}\n\n"
                 
-                # Add abstract section
-                paper_text += f"   ABSTRACT:\n   {abstract}\n\n"
+                if details_text:
+                    requests.append({
+                        'insertText': {
+                            'location': {'index': current_index},
+                            'text': details_text
+                        }
+                    })
+                    
+                    # Apply default Roboto font to details
+                    requests.append({
+                        'updateTextStyle': {
+                            'range': {'startIndex': current_index, 'endIndex': current_index + len(details_text)},
+                            'textStyle': {
+                                'weightedFontFamily': {'fontFamily': 'Roboto', 'weight': 400}
+                            },
+                            'fields': 'weightedFontFamily'
+                        }
+                    })
+                    current_index += len(details_text)
+                
+                # Abstract section header - use simple text without emoji
+                abstract_header_text = "ABSTRACT\n"
+                requests.append({
+                    'insertText': {
+                        'location': {'index': current_index},
+                        'text': abstract_header_text
+                    }
+                })
+                
+                # Format abstract header (bold, purple)
+                requests.append({
+                    'updateTextStyle': {
+                        'range': {'startIndex': current_index, 'endIndex': current_index + len(abstract_header_text) - 1},
+                        'textStyle': {
+                            'bold': True,
+                            'fontSize': {'magnitude': 11, 'unit': 'PT'},
+                            'foregroundColor': {'color': {'rgbColor': {'red': 0.6, 'green': 0.2, 'blue': 0.8}}},
+                            'weightedFontFamily': {'fontFamily': 'Roboto', 'weight': 700}
+                        },
+                        'fields': 'bold,fontSize,foregroundColor,weightedFontFamily'
+                    }
+                })
+                current_index += len(abstract_header_text)
+                
+                # Abstract content (indented)
+                indented_abstract = "    " + abstract.replace('\n', '\n    ') + "\n\n"
+                requests.append({
+                    'insertText': {
+                        'location': {'index': current_index},
+                        'text': indented_abstract
+                    }
+                })
+                
+                # Format abstract content (smaller, gray)
+                requests.append({
+                    'updateTextStyle': {
+                        'range': {'startIndex': current_index, 'endIndex': current_index + len(indented_abstract)},
+                        'textStyle': {
+                            'fontSize': {'magnitude': 10, 'unit': 'PT'},
+                            'foregroundColor': {'color': {'rgbColor': {'red': 0.3, 'green': 0.3, 'blue': 0.3}}},
+                            'weightedFontFamily': {'fontFamily': 'Roboto', 'weight': 400}
+                        },
+                        'fields': 'fontSize,foregroundColor,weightedFontFamily'
+                    }
+                })
+                current_index += len(indented_abstract)
                 
                 # Generate and add public summary
                 print(f"   Generating public summary...")
                 summary = self.generate_summary(title, abstract, year)
-                paper_text += f"   PUBLIC SUMMARY:\n   {summary}\n\n"
-                paper_text += "-" * 80 + "\n\n"
                 
-                # Insert the text
+                # Summary section header - use simple text without emoji
+                summary_header_text = "PUBLIC SUMMARY\n"
                 requests.append({
                     'insertText': {
                         'location': {'index': current_index},
-                        'text': paper_text
+                        'text': summary_header_text
                     }
                 })
                 
-                # Update current index
-                current_index += len(paper_text)
+                # Format summary header (bold, purple)
+                requests.append({
+                    'updateTextStyle': {
+                        'range': {'startIndex': current_index, 'endIndex': current_index + len(summary_header_text) - 1},
+                        'textStyle': {
+                            'bold': True,
+                            'fontSize': {'magnitude': 11, 'unit': 'PT'},
+                            'foregroundColor': {'color': {'rgbColor': {'red': 0.6, 'green': 0.2, 'blue': 0.8}}},
+                            'weightedFontFamily': {'fontFamily': 'Roboto', 'weight': 700}
+                        },
+                        'fields': 'bold,fontSize,foregroundColor,weightedFontFamily'
+                    }
+                })
+                current_index += len(summary_header_text)
+                
+                # Summary content (indented)
+                indented_summary = "    " + summary.replace('\n', '\n    ') + "\n\n"
+                requests.append({
+                    'insertText': {
+                        'location': {'index': current_index},
+                        'text': indented_summary
+                    }
+                })
+                
+                # Format summary content
+                requests.append({
+                    'updateTextStyle': {
+                        'range': {'startIndex': current_index, 'endIndex': current_index + len(indented_summary)},
+                        'textStyle': {
+                            'fontSize': {'magnitude': 11, 'unit': 'PT'},
+                            'foregroundColor': {'color': {'rgbColor': {'red': 0.1, 'green': 0.1, 'blue': 0.1}}},
+                            'weightedFontFamily': {'fontFamily': 'Roboto', 'weight': 400}
+                        },
+                        'fields': 'fontSize,foregroundColor,weightedFontFamily'
+                    }
+                })
+                current_index += len(indented_summary)
+                
+                # Add separator
+                separator_text = "─" * 60 + "\n\n"
+                requests.append({
+                    'insertText': {
+                        'location': {'index': current_index},
+                        'text': separator_text
+                    }
+                })
+                
+                # Format separator (light gray)
+                requests.append({
+                    'updateTextStyle': {
+                        'range': {'startIndex': current_index, 'endIndex': current_index + len(separator_text) - 2},
+                        'textStyle': {
+                            'foregroundColor': {'color': {'rgbColor': {'red': 0.8, 'green': 0.8, 'blue': 0.8}}},
+                            'weightedFontFamily': {'fontFamily': 'Roboto', 'weight': 400}
+                        },
+                        'fields': 'foregroundColor,weightedFontFamily'
+                    }
+                })
+                current_index += len(separator_text)
+            
+            # Apply justified alignment to the entire document
+            requests.append({
+                'updateParagraphStyle': {
+                    'range': {'startIndex': 1, 'endIndex': current_index},
+                    'paragraphStyle': {
+                        'alignment': 'JUSTIFIED'
+                    },
+                    'fields': 'alignment'
+                }
+            })
             
             # Execute all requests in batch
             result = self.service.documents().batchUpdate(
                 documentId=document_id, body={'requests': requests}).execute()
             
-            # Now add hyperlinks (this requires a second pass since we need the text to be inserted first)
+            # Now add hyperlinks (this requires a separate pass)
             self._add_hyperlinks_to_document(document_id, papers)
             
+            print("Document formatting applied successfully!")
             return result
             
         except HttpError as error:
@@ -494,7 +724,7 @@ def main():
         print(f"🕒 {timestamp}")
         print(f"🔗 Static URL: {doc_url}")
         print(f"📊 Papers included: {len(papers)}")
-        print("📝 Document includes: Timestamp, Paper Details, Full Abstracts, and AI Summaries")
+        print("📝 Document includes: Professional Formatting, Timestamps, Paper Details, Styled Abstracts, and Enhanced AI Summaries")
         print(f"💾 Document ID saved to {docs_creator.config_file} - this URL will never change!")
         
         # Also print a summary of what was included
