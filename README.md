@@ -84,6 +84,16 @@ When the user then enters a comma-separated list of the abstracts to summarize (
 
 The user may enter `n` should they not wish to see any summaries, and instead cleanly exit the script.
 
-### Options (yet to come)
+## Configuration Notes
 
-- I will add options to this code over time, but for now, a scrape from 2025 is hard-coded.
+The script now supports flexible configuration through command line arguments. Default values maintain backward compatibility:
+- **Default year**: 2025
+- **Default affiliation**: CfA/Smithsonian affiliations
+- **Paper type**: Only refereed papers are included
+- **Result limit**: Maximum 10 most recent papers
+
+
+&nbsp;
+
+
+![A wordmark that looks like the official CfA wordmark but instead says "CfA Science](cfa_logo.png)
