@@ -6,14 +6,17 @@ including author extraction, formatting, and API interaction logic.
 """
 
 import pytest
-import json
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from cfascience import (
-    extract_authors_affiliations,
-    format_author_list, 
     print_authors_affiliations,
     fetch_abstracts,
-    summarize_abstracts,
+    summarize_abstracts
+)
+from utils import (
+    extract_authors_affiliations,
+    format_author_list_for_display, 
+    is_cfa_affiliated,
+    classify_authors,
     Color
 )
 
@@ -74,7 +77,7 @@ class TestExtractAuthorsAffiliations:
         assert result == []
 
 
-class TestFormatAuthorList:
+class TestFormatAuthorListForDisplay:
     """Test the format_author_list function."""
     
     def test_format_with_cfa_authors_only(self):
@@ -83,7 +86,7 @@ class TestFormatAuthorList:
             {"author": "Smith, John", "affiliation": "Harvard-Smithsonian CfA"},
             {"author": "Doe, Jane", "affiliation": "Center for Astrophysics"}
         ]
-        result = format_author_list(authors_affiliations)
+        result = format_author_list_for_display(authors_affiliations)
         
         assert len(result) == 1
         assert "CfA Authors:" in result[0]
@@ -96,7 +99,7 @@ class TestFormatAuthorList:
             {"author": "Doe, Jane", "affiliation": "MIT"},
             {"author": "Brown, Bob", "affiliation": "Smithsonian Institution"}
         ]
-        result = format_author_list(authors_affiliations)
+        result = format_author_list_for_display(authors_affiliations)
         
         assert len(result) == 2
         assert any("CfA Authors:" in line for line in result)
@@ -110,7 +113,7 @@ class TestFormatAuthorList:
             {"author": "Smith, John", "affiliation": "MIT"},
             {"author": "Doe, Jane", "affiliation": "Stanford University"}
         ]
-        result = format_author_list(authors_affiliations)
+        result = format_author_list_for_display(authors_affiliations)
         
         assert len(result) == 1
         assert "Other Authors:" in result[0]
@@ -122,7 +125,7 @@ class TestFormatAuthorList:
             {"author": "Smith, John", "affiliation": ""},
             {"author": "Doe, Jane", "affiliation": None}
         ]
-        result = format_author_list(authors_affiliations)
+        result = format_author_list_for_display(authors_affiliations)
         
         assert len(result) == 1
         assert "Other Authors:" in result[0]
@@ -134,7 +137,7 @@ class TestFormatAuthorList:
             {"author": "Smith, John", "affiliation": "SMITHSONIAN ASTROPHYSICAL OBSERVATORY"},
             {"author": "Doe, Jane", "affiliation": "center for astrophysics | harvard & smithsonian"}
         ]
-        result = format_author_list(authors_affiliations)
+        result = format_author_list_for_display(authors_affiliations)
         
         assert len(result) == 1
         assert "CfA Authors:" in result[0]
@@ -365,8 +368,7 @@ class TestColorConstants:
     def test_color_constants_exist(self):
         """Test that all expected color constants exist."""
         expected_colors = [
-            'PURPLE', 'CYAN', 'DARKCYAN', 'BLUE', 'GREEN', 
-            'YELLOW', 'RED', 'MAGENTA', 'BOLD', 'UNDERLINE', 'END'
+            'CYAN', 'GREEN', 'YELLOW', 'MAGENTA', 'PURPLE', 'BOLD', 'END'
         ]
         
         for color in expected_colors:
@@ -382,6 +384,48 @@ class TestColorConstants:
             color_code = getattr(Color, color_name)
             assert color_code.startswith('\033[')
             assert color_code.endswith('m')
+
+
+class TestIsCfaAffiliated:
+    """Test the is_cfa_affiliated function."""
+    
+    def test_cfa_keywords(self):
+        """Test recognition of CfA-related keywords."""
+        assert is_cfa_affiliated("Harvard-Smithsonian Center for Astrophysics")
+        assert is_cfa_affiliated("Smithsonian Astrophysical Observatory")
+        assert is_cfa_affiliated("CfA")
+        assert is_cfa_affiliated("center for astrophysics")
+    
+    def test_non_cfa_affiliations(self):
+        """Test non-CfA affiliations return False."""
+        assert not is_cfa_affiliated("MIT")
+        assert not is_cfa_affiliated("Harvard University")
+        assert not is_cfa_affiliated("Stanford University")
+    
+    def test_empty_affiliations(self):
+        """Test empty or None affiliations return False."""
+        assert not is_cfa_affiliated("")
+        assert not is_cfa_affiliated(None)
+
+
+class TestClassifyAuthors:
+    """Test the classify_authors function."""
+    
+    def test_mixed_classification(self):
+        """Test classification of mixed author list."""
+        authors_affiliations = [
+            {"author": "Smith, John", "affiliation": "Harvard-Smithsonian CfA"},
+            {"author": "Doe, Jane", "affiliation": "MIT"},
+            {"author": "Brown, Bob", "affiliation": "Smithsonian Institution"}
+        ]
+        
+        cfa_authors, non_cfa_authors = classify_authors(authors_affiliations)
+        
+        assert "Smith, John" in cfa_authors
+        assert "Brown, Bob" in cfa_authors
+        assert "Doe, Jane" in non_cfa_authors
+        assert len(cfa_authors) == 2
+        assert len(non_cfa_authors) == 1
 
 
 if __name__ == "__main__":
