@@ -21,10 +21,7 @@ pip install -r requirements.txt
 pip install -r requirements_google_docs.txt
 ```
 
-**Important**: The requirements.txt is incomplete - you'll need to install `python-dotenv` which is used in the code:
-```bash
-pip install python-dotenv
-```
+All required dependencies are now included in requirements.txt.
 
 ### Running the Application
 
@@ -76,58 +73,161 @@ For Google Docs integration, additional setup is required:
 
 ## Code Architecture
 
-### Main Components
+The codebase has been refactored for maintainability, reducing code duplication and improving modularity:
+
+### Core Modules
+
+#### utils.py (Shared Utilities)
+Common functionality used across multiple scripts:
+- **Environment Setup**: `setup_environment()` handles API key loading and OpenAI client initialization
+- **Author Classification**: `is_cfa_affiliated()`, `classify_authors()` for institutional affiliation detection
+- **Data Processing**: `extract_authors_affiliations()` parses NASA ADS author data
+- **AI Integration**: `generate_summary()` provides unified OpenAI GPT-4o summary generation
+- **UI Utilities**: `format_author_list_for_display()` for consistent terminal formatting
+- **Color Constants**: Streamlined ANSI color codes for terminal output
 
 #### cfascience.py (Terminal Interface)
-The interactive terminal application (435 lines) with a functional organization:
-
-- **API Integration**: `fetch_abstracts()` handles NASA ADS queries
-- **Data Processing**: `extract_authors_affiliations()` parses author data
-- **UI Formatting**: Rich terminal output with ANSI colors, CfA authors highlighted in magenta
-- **AI Integration**: `summarize_abstracts()` uses OpenAI GPT-4o for summary generation
+The interactive terminal application with clean separation of concerns:
+- **API Integration**: `fetch_abstracts()` handles NASA ADS queries with proper error handling
+- **Query Building**: `build_query()` constructs flexible search parameters
+- **UI Display**: `print_authors_affiliations()` for detailed author information display
+- **User Interaction**: Interactive paper selection and summary generation with progress indicators
+- **Command Line Interface**: Comprehensive argument parsing for custom searches
 
 #### create_google_doc.py (Google Docs Integration)
-Automated document generation system that:
-- **Static Document Management**: Creates and maintains a single, permanent Google Doc
-- **Content Management**: Clears and updates document content with each run
-- **Image Processing**: Handles logo insertion with automatic resizing (currently disabled)
-- **API Integration**: Uses Google Docs API for document creation and formatting
-- **Data Integration**: Imports functionality from `cfascience.py` for paper fetching and processing
+Streamlined document generation system:
+- **Document Management**: OAuth2 authentication and static document handling
+- **Content Generation**: Integrates with shared utilities for consistent summary generation
+- **Formatting**: Uses `google_docs_formatter.py` for clean document structure
+- **Error Handling**: Robust error handling for API failures and authentication issues
+
+#### google_docs_formatter.py (Document Formatting)
+Dedicated module for Google Docs styling and structure:
+- **Style Constants**: Centralized formatting definitions (fonts, colors, sizes)
+- **Request Builders**: Modular functions for creating Google Docs API requests
+- **Content Sections**: Specialized functions for headers, abstracts, summaries, and separators
+- **Layout Management**: Professional document structure with consistent styling
 
 ### Key Functionality Flow
 
+#### Shared Environment Setup
+1. `utils.setup_environment()` loads API keys from `api_keys.env`
+2. Initializes OpenAI client with error handling for missing keys
+3. Returns configured clients for use across modules
+
 #### Terminal Interface (cfascience.py)
-1. Queries NASA ADS for 2025 papers with CfA/Smithsonian affiliations
-2. Displays papers with formatted author lists (CfA authors highlighted)
-3. User selects papers to summarize
-4. Generates public-friendly summaries via OpenAI API
+1. Uses shared utilities to setup environment and classify authors
+2. Queries NASA ADS with flexible search parameters (year range, custom affiliations)
+3. Displays papers with consistent formatting (CfA authors highlighted in magenta)
+4. User selects papers interactively
+5. Generates summaries using shared `generate_summary()` function with author context
+6. Displays results with detailed author affiliations and publication information
 
 #### Google Docs Integration (create_google_doc.py)
-1. Authenticates with Google Docs API (OAuth2 flow)
-2. Gets or creates a static document (permanent URL)
-3. Fetches all 10 recent papers from NASA ADS
-4. Generates AI summaries for all papers automatically
-5. Clears existing document content
-6. Populates document with formatted content including abstracts and summaries
-7. Provides permanent shareable link
+1. Authenticates with Google Docs API using OAuth2 flow
+2. Gets or creates a static document with persistent URL
+3. Fetches papers using shared `fetch_abstracts()` function
+4. Uses modular formatting functions from `google_docs_formatter.py`:
+   - Document headers with timestamps
+   - Paper titles and publication details
+   - Formatted abstract sections
+   - AI-generated public summaries with CfA author highlighting
+   - Professional separators and styling
+5. Adds hyperlinks to NASA ADS for each paper
+6. Provides permanent shareable link with document statistics
 
-### Configuration Constants
-Hard-coded query parameters target specific institutional affiliations and date ranges. These are embedded in the code and may need updates for different time periods or institutions.
+### Configuration and Customization
+
+**Flexible Search Parameters**: Both terminal and Google Docs interfaces support:
+- Custom year ranges (`--start-year`, `--end-year`)
+- Custom institution affiliations (`--affiliation`)
+- Default CfA/Smithsonian queries with ZIP code targeting
+
+**Styling Configuration**: `google_docs_formatter.py` centralizes:
+- Font families, sizes, and weights
+- Color schemes for different content types
+- Document structure and spacing
+- Professional formatting standards
+
+**Environment Configuration**: All API keys and settings in `api_keys.env`:
+- NASA ADS API token
+- OpenAI API key
+- Google Cloud OAuth2 credentials (separate file)
 
 ## Dependencies and APIs
 
 ### External APIs
-- **NASA ADS**: Astrophysics database queries
-- **OpenAI**: GPT-4o model for text summarization
+- **NASA ADS**: Astrophysics database queries with proper error handling
+- **OpenAI**: GPT-4o model for context-aware text summarization
+- **Google Docs**: Document creation and formatting via Google API
 
-### Missing Dependencies
-If you encounter import errors, note that `python-dotenv` is used but not listed in requirements.txt.
+### Dependency Management
+All dependencies are properly specified in `requirements.txt`:
+- `requests`: NASA ADS API calls
+- `openai`: GPT model integration
+- `python-dotenv`: Environment variable management
+- `pytest` & `pytest-mock`: Testing framework
 
 ## Testing
 
-No formal testing framework is implemented for the Google Docs integration. The original cfascience.py has basic testing infrastructure.
+**Comprehensive Test Suite** (`tests/test_cfascience.py`):
+- Unit tests for all utility functions
+- Author classification and affiliation detection
+- API response handling and error conditions
+- Color formatting and display functions
+- Mock-based testing for external API calls
+- Type checking and edge case coverage
+
+**Test Coverage**: Core functionality including:
+- Author-affiliation extraction and pairing
+- CfA affiliation detection (case-insensitive)
+- Author list formatting for terminal display
+- NASA ADS API response processing
+- OpenAI summary generation (mocked)
+- Error handling for missing data
+
+## Project Structure
+
+```
+├── cfascience.py              # Interactive terminal interface
+├── create_google_doc.py       # Google Docs integration
+├── utils.py                   # Shared utilities and common functions
+├── google_docs_formatter.py   # Google Docs formatting utilities
+├── tests/
+│   ├── __init__.py
+│   └── test_cfascience.py     # Comprehensive test suite
+├── requirements.txt           # Core dependencies
+├── requirements_google_docs.txt # Additional Google API dependencies
+├── api_keys.env              # Environment variables (user-created)
+├── credentials.json          # Google OAuth2 credentials (user-created)
+└── CLAUDE.md                 # This documentation file
+```
 
 ## Branch Structure
 
 - `main`: Production/stable branch
 - `dev`: Development branch (currently active)
+
+## Code Quality Improvements
+
+**Refactoring Benefits**:
+- **Reduced Code Duplication**: Common functions moved to shared modules
+- **Improved Type Safety**: Type hints throughout codebase
+- **Modular Architecture**: Clear separation of concerns
+- **Enhanced Error Handling**: Comprehensive error management
+- **Better Documentation**: Detailed docstrings and inline comments
+- **Consistent Styling**: Unified formatting and naming conventions
+
+# Code Quality Standards
+
+**Type Safety**: All functions include proper type hints for parameters and return values.
+
+**Error Handling**: Comprehensive exception handling with informative error messages.
+
+**Documentation**: Every function includes detailed docstrings following Google style.
+
+**Modularity**: Code is organized into focused modules with single responsibilities.
+
+**Testing**: Unit tests cover core functionality with edge cases and error conditions.
+
+**Consistency**: Uniform naming conventions, formatting, and code structure throughout.

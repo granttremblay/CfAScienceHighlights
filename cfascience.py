@@ -8,45 +8,25 @@ highlighted in the output.
 """
 
 # Standard library imports
-import os
 import sys
 import time
 import threading
 import itertools
 import argparse
+from typing import List, Dict, Optional
 
 # Third-party imports
 import requests
-from openai import OpenAI
-from dotenv import load_dotenv
+
+# Local imports
+from utils import (
+    Color, setup_environment, is_cfa_affiliated, classify_authors,
+    extract_authors_affiliations, generate_summary, format_author_list_for_display
+)
 
 
-# Load environment variables from .env file
-load_dotenv('api_keys.env')
-
-# Set NASA ADS API token and OpenAI API key from environment variables
-ADS_API_TOKEN = os.getenv("ADS_API_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-# Initialize OpenAI client
-client = OpenAI(api_key=OPENAI_API_KEY)
-
-
-# ANSI color codes for terminal output
-class Color:
-    """ANSI color codes for terminal text formatting."""
-    PURPLE = '\033[95m'
-    CYAN = '\033[96m'
-    DARKCYAN = '\033[36m'
-    BLUE = '\033[94m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    MAGENTA = '\033[35m'  # Magenta for CfA authors
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-    END = '\033[0m'
-
+# Initialize environment and API clients
+ADS_API_TOKEN, client = setup_environment()
 
 # ADS API endpoint and headers
 ADS_API_URL = "https://api.adsabs.harvard.edu/v1/search/query"
@@ -57,7 +37,9 @@ ADS_HEADERS = {
 # Default query parameters - now handled dynamically in build_query()
 
 
-def build_query(affiliation_string=None, start_year=None, end_year=None):
+def build_query(affiliation_string: Optional[str] = None, 
+                start_year: Optional[int] = None, 
+                end_year: Optional[int] = None) -> str:
     """
     Build the ADS query string with custom parameters.
 
@@ -67,7 +49,7 @@ def build_query(affiliation_string=None, start_year=None, end_year=None):
         end_year: End year for search (default: same as start_year)
 
     Returns:
-        str: The formatted query string
+        The formatted query string
     """
     # Default affiliation string for CfA/Smithsonian
     if affiliation_string is None:
@@ -88,109 +70,54 @@ def build_query(affiliation_string=None, start_year=None, end_year=None):
     return f'{affiliation_string} {year_part} property:refereed'
 
 
-def extract_authors_affiliations(doc):
-    """
-    Extract author and affiliation pairs from a document.
-
-    Args:
-        doc: Document dictionary from ADS API
-
-    Returns:
-        List of dictionaries with author names and affiliations
-    """
-    authors = doc.get("author", [])
-    affiliations = doc.get("aff", [])
-    # Pair authors with affiliations if possible
-    author_aff_pairs = []
-    for i, author in enumerate(authors):
-        aff = affiliations[i] if i < len(affiliations) else ""
-        author_aff_pairs.append({"author": author, "affiliation": aff})
-    return author_aff_pairs
 
 
-def format_author_list(authors_affiliations):
-    """
-    Format author list for initial display, highlighting CfA authors.
-
-    Args:
-        authors_affiliations: List of dictionaries with author names and
-                             affiliations
-
-    Returns:
-        List of formatted strings ready for display
-    """
-    cfa_authors = []
-    other_authors = []
-
-    for entry in authors_affiliations:
-        author = entry["author"]
-        aff = entry["affiliation"]
-
-        # Check if this is a Smithsonian-affiliated author
-        if is_cfa_affiliated(aff):
-            cfa_authors.append(author)
-        else:
-            other_authors.append(author)
-
-    formatted_lines = []
-    if cfa_authors:
-        cfa_author_str = f"{Color.BOLD}{Color.MAGENTA}{', '.join(cfa_authors)}{Color.END}"
-        formatted_lines.append(
-            f"   {Color.BOLD}{Color.YELLOW}CfA Authors:{Color.END} {cfa_author_str}")
-
-    if other_authors:
-        other_author_str = f"{Color.CYAN}{', '.join(other_authors)}{Color.END}"
-        formatted_lines.append(
-            f"   {Color.YELLOW}Other Authors:{Color.END} {other_author_str}")
-
-    return formatted_lines
 
 
-def print_authors_affiliations(authors_affiliations):
+def print_authors_affiliations(authors_affiliations: List[Dict[str, str]]) -> None:
     """
     Print detailed author and affiliation information with color highlighting.
 
     Args:
-        authors_affiliations: List of dictionaries with author names and
-                             affiliations
+        authors_affiliations: List of dictionaries with author names and affiliations
     """
-    # Process all authors first to make a cleaner output
-    smithsonian_authors = []
-    other_authors = []
+    cfa_authors_with_aff = []
+    other_authors_with_aff = []
 
     for entry in authors_affiliations:
         author = entry["author"]
-        aff = entry["affiliation"]
+        affiliation = entry["affiliation"]
 
-        # Check if this is a Smithsonian-affiliated author
-        if is_cfa_affiliated(aff):
-            smithsonian_authors.append((author, aff))
+        if is_cfa_affiliated(affiliation):
+            cfa_authors_with_aff.append((author, affiliation))
         else:
-            other_authors.append((author, aff))
+            other_authors_with_aff.append((author, affiliation))
 
-    # Print Smithsonian authors first, highlighted
-    if smithsonian_authors:
+    # Print CfA authors first, highlighted
+    if cfa_authors_with_aff:
         print(f"  {Color.BOLD}{Color.YELLOW}CfA Authors:{Color.END}")
-        for author, aff in smithsonian_authors:
+        for author, affiliation in cfa_authors_with_aff:
             author_str = f"{Color.BOLD}{Color.MAGENTA}{author}{Color.END}"
-            aff_str = f"{Color.GREEN}{aff}{Color.END}"
+            aff_str = f"{Color.GREEN}{affiliation}{Color.END}"
             print(f"    • {author_str} ({aff_str})")
 
     # Print other authors
-    if other_authors:
-        if smithsonian_authors:  # Add separator if we have both types
+    if other_authors_with_aff:
+        if cfa_authors_with_aff:  # Add separator if we have both types
             print()
         print(f"  {Color.BOLD}Other Authors:{Color.END}")
-        for author, aff in other_authors:
+        for author, affiliation in other_authors_with_aff:
             author_str = f"{Color.CYAN}{author}{Color.END}"
-            if aff:
-                aff_str = f"{Color.GREEN}{aff}{Color.END}"
+            if affiliation:
+                aff_str = f"{Color.GREEN}{affiliation}{Color.END}"
                 print(f"    • {author_str} ({aff_str})")
             else:
                 print(f"    • {author_str}")
 
 
-def fetch_abstracts(affiliation_string=None, start_year=None, end_year=None):
+def fetch_abstracts(affiliation_string: Optional[str] = None, 
+                    start_year: Optional[int] = None, 
+                    end_year: Optional[int] = None) -> List[Dict]:
     """
     Fetch abstracts from NASA ADS API with custom search parameters.
 
@@ -201,6 +128,9 @@ def fetch_abstracts(affiliation_string=None, start_year=None, end_year=None):
 
     Returns:
         List of dictionaries containing abstract data
+        
+    Raises:
+        requests.RequestException: If the API request fails
     """
     query = build_query(affiliation_string, start_year, end_year)
     params = {
@@ -217,16 +147,19 @@ def fetch_abstracts(affiliation_string=None, start_year=None, end_year=None):
         timeout=30
     )
     response.raise_for_status()
+    
     docs = response.json().get("response", {}).get("docs", [])
     abstracts = []
+    
     for doc in docs:
-        title = doc.get("title", [""])[0]
+        title = doc.get("title", [""])[0] if doc.get("title") else ""
         abstract = doc.get("abstract", "")
         year = doc.get("year", "")
         journal = doc.get("journal", "")
         publication = doc.get("pub", "")
         pubdate = doc.get("pubdate", "")
         authors_affiliations = extract_authors_affiliations(doc)
+        
         abstracts.append({
             "title": title,
             "abstract": abstract,
@@ -236,27 +169,13 @@ def fetch_abstracts(affiliation_string=None, start_year=None, end_year=None):
             "pubdate": pubdate,
             "authors_affiliations": authors_affiliations
         })
+    
     return abstracts
 
 
-def is_cfa_affiliated(affiliation):
-    """
-    Check if an affiliation is Smithsonian-affiliated.
-
-    Args:
-        affiliation: Author affiliation string
-
-    Returns:
-        Boolean indicating if the affiliation is Smithsonian-affiliated
-    """
-    smithsonian_keywords = ['smithsonian', 'cfa', 'center for astrophysics']
-    has_keywords = affiliation and any(
-        s in affiliation.lower() for s in smithsonian_keywords
-    )
-    return has_keywords
 
 
-def summarize_abstracts(abstracts):
+def summarize_abstracts(abstracts: List[Dict]) -> List[Dict[str, str]]:
     """
     Generate public-facing summaries for abstracts using OpenAI's GPT model.
 
@@ -270,7 +189,7 @@ def summarize_abstracts(abstracts):
     """
     summaries = []
 
-    def spinner_running(stop_event):
+    def spinner_running(stop_event: threading.Event) -> None:
         """Display a spinning animation in the terminal while processing."""
         spinner = itertools.cycle(['|', '/', '-', '\\'])
         while not stop_event.is_set():
@@ -280,67 +199,38 @@ def summarize_abstracts(abstracts):
         sys.stdout.write("\r" + " "*30 + "\r")  # Clear line
 
     for abs_data in abstracts:
-        # Extract CfA and non-CfA authors
+        # Classify authors
         authors_affiliations = abs_data.get('authors_affiliations', [])
-        cfa_authors = []
-        non_cfa_authors = []
+        cfa_authors, non_cfa_authors = classify_authors(authors_affiliations)
         
-        for entry in authors_affiliations:
-            author = entry["author"]
-            aff = entry["affiliation"]
-            if is_cfa_affiliated(aff):
-                cfa_authors.append(author)
-            else:
-                non_cfa_authors.append(author)
-        
-        # Build author context for the prompt
-        author_context = ""
-        if cfa_authors:
-            if len(cfa_authors) == 1:
-                author_context += f"CfA Author: {cfa_authors[0]}\n"
-            else:
-                author_context += f"CfA Authors: {', '.join(cfa_authors)}\n"
-        
-        if non_cfa_authors:
-            if len(non_cfa_authors) <= 3:
-                author_context += f"Other Authors: {', '.join(non_cfa_authors)}\n"
-            else:
-                author_context += f"Other Authors: {', '.join(non_cfa_authors[:3])}, and {len(non_cfa_authors) - 3} others\n"
-        
-        prompt = (
-            f"Title: {abs_data['title']} (Year: {abs_data['year']})\n"
-            f"Abstract: {abs_data['abstract']}\n\n"
-            f"{author_context}\n"
-            "Write a public-facing summary in two paragraphs for a general audience. "
-            "If there are CfA authors listed, specifically highlight their contribution "
-            "by mentioning them by name in the summary (e.g., 'A team including CfA astronomers "
-            "Jane Doe and John Smith have discovered...' or 'CfA researcher Dr. Jane Doe led a study that...'). "
-            "Make the summary accessible and engaging for the public."
-        )
+        # Generate summary with spinner
         stop_event = threading.Event()
-        spinner_thread = threading.Thread(
-            target=spinner_running, args=(stop_event,))
+        spinner_thread = threading.Thread(target=spinner_running, args=(stop_event,))
         spinner_thread.start()
+        
         try:
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=400,
-                temperature=0.7
+            summary = generate_summary(
+                client=client,
+                title=abs_data['title'],
+                abstract=abs_data['abstract'],
+                year=abs_data['year'],
+                cfa_authors=cfa_authors,
+                non_cfa_authors=non_cfa_authors
             )
         finally:
             stop_event.set()
             spinner_thread.join()
-        summary = response.choices[0].message.content.strip()
+            
         summaries.append({
             "title": abs_data["title"],
             "year": abs_data["year"],
             "summary": summary
         })
+        
     return summaries
 
 
-def parse_arguments():
+def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         description="Generate public-facing summaries of CfA research papers from NASA ADS",
@@ -376,7 +266,7 @@ Examples:
     return parser.parse_args()
 
 
-def main():
+def main() -> None:
     args = parse_arguments()
 
     # Pass the command line arguments to fetch_abstracts
@@ -404,7 +294,7 @@ def main():
         print(f"{idx}. {Color.BOLD}{Color.CYAN}{title}{Color.END}")
 
         # Format and print authors with CfA authors highlighted
-        author_lines = format_author_list(
+        author_lines = format_author_list_for_display(
             abs_data.get('authors_affiliations', []))
         for line in author_lines:
             print(line)
