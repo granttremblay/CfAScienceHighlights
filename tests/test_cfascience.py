@@ -210,6 +210,7 @@ class TestFetchAbstracts:
                         "pub": "Test Publication",
                         "pubdate": "2025-01-01",
                         "bibcode": "2025TestJ...1..123S",
+                        "identifier": ["arXiv:2501.12345"],
                         "author": ["Smith, John"],
                         "aff": ["Harvard-Smithsonian CfA"]
                     }
@@ -225,6 +226,7 @@ class TestFetchAbstracts:
         assert result[0]["abstract"] == "This is a test abstract"
         assert result[0]["year"] == "2025"
         assert result[0]["bibcode"] == "2025TestJ...1..123S"
+        assert result[0]["arxiv_id"] == "2501.12345"
         assert len(result[0]["authors_affiliations"]) == 1
         
         # Verify API was called with correct parameters
@@ -268,6 +270,7 @@ class TestFetchAbstracts:
         assert result[0]["abstract"] == ""
         assert result[0]["year"] == ""
         assert result[0]["bibcode"] == ""
+        assert result[0]["arxiv_id"] is None
         assert result[0]["authors_affiliations"] == []
     
     @patch('cfascience.requests.get')
@@ -429,6 +432,64 @@ class TestClassifyAuthors:
         assert "Doe, Jane" in non_cfa_authors
         assert len(cfa_authors) == 2
         assert len(non_cfa_authors) == 1
+
+
+class TestArXivIntegration:
+    """Test ArXiv ID extraction and processing."""
+    
+    @patch('cfascience.requests.get')
+    def test_arxiv_id_extraction(self, mock_get):
+        """Test extraction of ArXiv IDs from identifier field."""
+        mock_response = Mock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {
+            "response": {
+                "docs": [
+                    {
+                        "title": ["Paper with ArXiv"],
+                        "abstract": "Test abstract",
+                        "year": "2025",
+                        "identifier": ["arXiv:2501.12345", "doi:10.1234/example"],
+                        "bibcode": "2025TestJ...1..123A",
+                        "author": ["Test, Author"],
+                        "aff": ["Test University"]
+                    }
+                ]
+            }
+        }
+        mock_get.return_value = mock_response
+        
+        result = fetch_abstracts()
+        
+        assert len(result) == 1
+        assert result[0]["arxiv_id"] == "2501.12345"
+    
+    @patch('cfascience.requests.get')
+    def test_no_arxiv_id(self, mock_get):
+        """Test handling when no ArXiv ID is present."""
+        mock_response = Mock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {
+            "response": {
+                "docs": [
+                    {
+                        "title": ["Paper without ArXiv"],
+                        "abstract": "Test abstract", 
+                        "year": "2025",
+                        "identifier": ["doi:10.1234/example"],
+                        "bibcode": "2025TestJ...1..123B",
+                        "author": ["Test, Author"],
+                        "aff": ["Test University"]
+                    }
+                ]
+            }
+        }
+        mock_get.return_value = mock_response
+        
+        result = fetch_abstracts()
+        
+        assert len(result) == 1
+        assert result[0]["arxiv_id"] is None
 
 
 if __name__ == "__main__":

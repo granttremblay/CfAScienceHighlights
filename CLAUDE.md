@@ -8,7 +8,7 @@ This is a Python CLI tool that scrapes astronomical research papers from NASA AD
 
 The repository includes two main tools:
 1. **cfascience.py** - Interactive terminal interface for exploring and summarizing papers
-2. **create_google_doc.py** - Google Docs integration that automatically generates formatted documents
+2. **create_google_doc.py** - Google Docs integration that automatically generates formatted documents with links to both NASA ADS and ArXiv (when available)
 
 ## Development Commands
 
@@ -27,10 +27,10 @@ All required dependencies are now included in requirements.txt.
 
 **Terminal Interface:**
 ```bash
-# Default: CfA papers from 2025
+# Default: CfA papers from 2025 (will prompt for search preferences)
 python cfascience.py
 
-# Custom year and affiliation examples
+# Custom year and affiliation examples (will prompt for search preferences)
 python cfascience.py --start-year 2024
 python cfascience.py --affiliation 'aff:"MIT"' --start-year 2023 --end-year 2024
 python cfascience.py --help  # See all options
@@ -38,9 +38,14 @@ python cfascience.py --help  # See all options
 
 **Google Docs Integration:**
 ```bash
-# Creates/updates a static Google Doc with all papers, abstracts, and AI summaries
+# Creates/updates a static Google Doc with papers and AI summaries (will prompt for search preferences)
 python create_google_doc.py
 ```
+
+**Interactive Search Options:**
+Both scripts will prompt you to choose:
+- **Author Position**: First author papers only vs. any author papers from the affiliation
+- **Publication Type**: Refereed papers only vs. all papers (including preprints)
 
 ### Testing
 ```bash
@@ -129,11 +134,10 @@ Dedicated module for Google Docs styling and structure:
 3. Fetches papers using shared `fetch_abstracts()` function
 4. Uses modular formatting functions from `google_docs_formatter.py`:
    - Document headers with timestamps
-   - Paper titles and publication details
-   - Formatted abstract sections
+   - Paper titles and publication details with CfA authors highlighted separately
    - AI-generated public summaries with CfA author highlighting
-   - Professional separators and styling
-5. Adds hyperlinks to NASA ADS for each paper
+   - Professional horizontal rule separators between papers
+5. Adds hyperlinks to NASA ADS and ArXiv (when available) for each paper
 6. Provides permanent shareable link with document statistics
 
 ### Configuration and Customization

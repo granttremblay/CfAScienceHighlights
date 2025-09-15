@@ -21,7 +21,8 @@ import requests
 # Local imports
 from utils import (
     Color, setup_environment, is_cfa_affiliated, classify_authors,
-    extract_authors_affiliations, generate_summary, format_author_list_for_display
+    extract_authors_affiliations, generate_summary, format_author_list_for_display,
+    get_search_preferences
 )
 
 
@@ -39,7 +40,9 @@ ADS_HEADERS = {
 
 def build_query(affiliation_string: Optional[str] = None, 
                 start_year: Optional[int] = None, 
-                end_year: Optional[int] = None) -> str:
+                end_year: Optional[int] = None,
+                first_author_only: bool = False,
+                refereed_only: bool = True) -> str:
     """
     Build the ADS query string with custom parameters.
 
@@ -47,13 +50,23 @@ def build_query(affiliation_string: Optional[str] = None,
         affiliation_string: Custom affiliation string (default: CfA/Smithsonian)
         start_year: Start year for search (default: 2025)
         end_year: End year for search (default: same as start_year)
+        first_author_only: If True, search only first author affiliations
+        refereed_only: If True, include only refereed publications
 
     Returns:
         The formatted query string
     """
     # Default affiliation string for CfA/Smithsonian
     if affiliation_string is None:
-        affiliation_string = 'pos(aff:"02138",1) pos(aff:"Smithsonian",1)'
+        if first_author_only:
+            affiliation_string = 'pos(aff:"02138",1) pos(aff:"Smithsonian",1)'
+        else:
+            affiliation_string = 'aff:"02138" OR aff:"Smithsonian"'
+    else:
+        # If custom affiliation provided, modify it based on first_author_only setting
+        if first_author_only and not affiliation_string.startswith('pos('):
+            # Wrap custom affiliation in pos() for first author search
+            affiliation_string = f'pos({affiliation_string},1)'
 
     # Default year range
     if start_year is None:
@@ -67,7 +80,13 @@ def build_query(affiliation_string: Optional[str] = None,
     else:
         year_part = f'year:{start_year}-{end_year}'
 
-    return f'{affiliation_string} {year_part} property:refereed'
+    # Build the query
+    query_parts = [affiliation_string, year_part]
+    
+    if refereed_only:
+        query_parts.append('property:refereed')
+
+    return ' '.join(query_parts)
 
 
 
@@ -117,7 +136,9 @@ def print_authors_affiliations(authors_affiliations: List[Dict[str, str]]) -> No
 
 def fetch_abstracts(affiliation_string: Optional[str] = None, 
                     start_year: Optional[int] = None, 
-                    end_year: Optional[int] = None) -> List[Dict]:
+                    end_year: Optional[int] = None,
+                    first_author_only: bool = False,
+                    refereed_only: bool = True) -> List[Dict]:
     """
     Fetch abstracts from NASA ADS API with custom search parameters.
 
@@ -125,6 +146,8 @@ def fetch_abstracts(affiliation_string: Optional[str] = None,
         affiliation_string: Custom affiliation string (default: CfA/Smithsonian)
         start_year: Start year for search (default: 2025)
         end_year: End year for search (default: same as start_year)
+        first_author_only: If True, search only first author affiliations
+        refereed_only: If True, include only refereed publications
 
     Returns:
         List of dictionaries containing abstract data
@@ -132,10 +155,10 @@ def fetch_abstracts(affiliation_string: Optional[str] = None,
     Raises:
         requests.RequestException: If the API request fails
     """
-    query = build_query(affiliation_string, start_year, end_year)
+    query = build_query(affiliation_string, start_year, end_year, first_author_only, refereed_only)
     params = {
         "q": query,
-        "fl": "title,abstract,year,author,aff,journal,pub,pubdate,bibcode",
+        "fl": "title,abstract,year,author,aff,journal,pub,pubdate,bibcode,identifier",
         "sort": "date desc",
         "rows": 10
     }
@@ -159,7 +182,16 @@ def fetch_abstracts(affiliation_string: Optional[str] = None,
         publication = doc.get("pub", "")
         pubdate = doc.get("pubdate", "")
         bibcode = doc.get("bibcode", "")
+        identifiers = doc.get("identifier", [])
         authors_affiliations = extract_authors_affiliations(doc)
+        
+        # Extract ArXiv ID from identifiers
+        arxiv_id = None
+        if identifiers:
+            for identifier in identifiers:
+                if identifier.startswith("arXiv:"):
+                    arxiv_id = identifier.replace("arXiv:", "")
+                    break
         
         abstracts.append({
             "title": title,
@@ -169,6 +201,7 @@ def fetch_abstracts(affiliation_string: Optional[str] = None,
             "publication": publication,
             "pubdate": pubdate,
             "bibcode": bibcode,
+            "arxiv_id": arxiv_id,
             "authors_affiliations": authors_affiliations
         })
     
@@ -232,6 +265,7 @@ def summarize_abstracts(abstracts: List[Dict]) -> List[Dict[str, str]]:
     return summaries
 
 
+
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
@@ -270,12 +304,17 @@ Examples:
 
 def main() -> None:
     args = parse_arguments()
+    
+    # Get user preferences for search type
+    first_author_only, refereed_only = get_search_preferences()
 
-    # Pass the command line arguments to fetch_abstracts
+    # Pass the command line arguments and user preferences to fetch_abstracts
     abstracts = fetch_abstracts(
         affiliation_string=args.affiliation,
         start_year=args.start_year,
-        end_year=args.end_year
+        end_year=args.end_year,
+        first_author_only=first_author_only,
+        refereed_only=refereed_only
     )
 
     if not abstracts:

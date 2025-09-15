@@ -7,6 +7,7 @@ including text styling, hyperlink creation, and document structure management.
 
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from utils import classify_authors
 
 
 class GoogleDocsStyle:
@@ -192,7 +193,7 @@ def format_publication_date(pubdate: str) -> str:
 
 
 def create_paper_content_requests(paper: Dict[str, Any], paper_index: int, 
-                                current_index: int) -> tuple[List[Dict[str, Any]], int, Dict[str, Any]]:
+                                current_index: int) -> tuple[List[Dict[str, Any]], int, List[Dict[str, Any]]]:
     """
     Create requests for a single paper's content.
     
@@ -202,7 +203,7 @@ def create_paper_content_requests(paper: Dict[str, Any], paper_index: int,
         current_index: Current character index in the document
         
     Returns:
-        Tuple of (requests list, new current index, link info dictionary)
+        Tuple of (requests list, new current index, list of link info dictionaries)
     """
     requests = []
     
@@ -212,6 +213,7 @@ def create_paper_content_requests(paper: Dict[str, Any], paper_index: int,
     publication = paper.get('publication', '')
     pubdate = paper.get('pubdate', 'Unknown date')
     bibcode = paper.get('bibcode', '')
+    arxiv_id = paper.get('arxiv_id')
     authors_affiliations = paper.get('authors_affiliations', [])
     abstract = paper.get('abstract', 'No abstract available')
     
@@ -230,15 +232,15 @@ def create_paper_content_requests(paper: Dict[str, Any], paper_index: int,
     current_index += len(paper_title_text)
     
     # Publication details  
-    details_text = _build_publication_details(journal, publication, pubdate, authors_affiliations)
-    link_info = {}
+    details_text = _build_publication_details(journal, publication, pubdate, authors_affiliations, arxiv_id)
+    link_infos = []
     
     if details_text:
         # Find the position of the "[View on NASA ADS]" text for linking
-        link_start_in_details = details_text.find('[View on NASA ADS]')
-        if link_start_in_details != -1:
-            link_start = current_index + link_start_in_details
-            link_end = link_start + len('[View on NASA ADS]')
+        ads_start_in_details = details_text.find('[View on NASA ADS]')
+        if ads_start_in_details != -1:
+            ads_start = current_index + ads_start_in_details
+            ads_end = ads_start + len('[View on NASA ADS]')
             
             # Create proper ADS URL
             if bibcode:
@@ -248,20 +250,55 @@ def create_paper_content_requests(paper: Dict[str, Any], paper_index: int,
                 title_encoded = title.replace(' ', '+').replace('&', '%26')
                 ads_url = f"https://ui.adsabs.harvard.edu/search/q={title_encoded}"
             
-            link_info = {
-                'start_index': link_start,
-                'end_index': link_end,
+            link_infos.append({
+                'start_index': ads_start,
+                'end_index': ads_end,
                 'url': ads_url
-            }
+            })
         
+        # Find the position of the "[View on ArXiv]" text for linking
+        if arxiv_id:
+            arxiv_start_in_details = details_text.find('[View on ArXiv]')
+            if arxiv_start_in_details != -1:
+                arxiv_start = current_index + arxiv_start_in_details
+                arxiv_end = arxiv_start + len('[View on ArXiv]')
+                arxiv_url = f"https://arxiv.org/abs/{arxiv_id}"
+                
+                link_infos.append({
+                    'start_index': arxiv_start,
+                    'end_index': arxiv_end,
+                    'url': arxiv_url
+                })
+        
+        # Insert details text
         requests.append(create_text_request(details_text, current_index))
+        
+        # Apply special styling to CfA authors line if present
+        cfa_line_start = details_text.find('CfA Authors:')
+        if cfa_line_start != -1:
+            # Find the end of the CfA authors line
+            cfa_line_end = details_text.find('\n', cfa_line_start)
+            if cfa_line_end == -1:
+                cfa_line_end = len(details_text)
+            
+            # Apply special styling to CfA authors line (make it bold and colored)
+            requests.append(create_style_request(
+                current_index + cfa_line_start,
+                current_index + cfa_line_end,
+                bold=True,
+                font_size=GoogleDocsStyle.CONTENT_SIZE,
+                color={'red': 0.6, 'green': 0.2, 'blue': 0.8},  # Purple color for CfA
+                font_weight=700
+            ))
+        
+        # Apply default styling to the rest of the details
         requests.append(create_style_request(
             current_index, current_index + len(details_text),
             font_size=GoogleDocsStyle.CONTENT_SIZE
         ))
         current_index += len(details_text)
     
-    return requests, current_index, link_info
+    return requests, current_index, link_infos
 
 
 def create_abstract_section_requests(abstract: str, current_index: int) -> tuple[List[Dict[str, Any]], int]:
@@ -338,7 +375,7 @@ def create_summary_section_requests(summary: str, current_index: int) -> tuple[L
 
 def create_separator_requests(current_index: int) -> tuple[List[Dict[str, Any]], int]:
     """
-    Create requests for a section separator.
+    Create requests for a section separator using a simple text line.
     
     Args:
         current_index: Current character index in the document
@@ -348,11 +385,13 @@ def create_separator_requests(current_index: int) -> tuple[List[Dict[str, Any]],
     """
     requests = []
     
-    separator_text = "─" * 60 + "\n\n"
+    # Use a simple, clean separator with proper spacing
+    separator_text = "\n" + ("_" * 50) + "\n\n"
     requests.append(create_text_request(separator_text, current_index))
     requests.append(create_style_request(
-        current_index, current_index + len(separator_text) - 2,
-        color=GoogleDocsStyle.COLORS['separator']
+        current_index + 1, current_index + 1 + 50,  # Style just the underscores
+        color=GoogleDocsStyle.COLORS['separator'],
+        font_size=GoogleDocsStyle.DETAIL_SIZE
     ))
     current_index += len(separator_text)
     
@@ -379,7 +418,8 @@ def create_justification_request(end_index: int) -> Dict[str, Any]:
 
 
 def _build_publication_details(journal: str, publication: str, pubdate: str, 
-                             authors_affiliations: List[Dict[str, str]]) -> str:
+                             authors_affiliations: List[Dict[str, str]], 
+                             arxiv_id: Optional[str] = None) -> str:
     """
     Build the publication details text section.
     
@@ -388,6 +428,7 @@ def _build_publication_details(journal: str, publication: str, pubdate: str,
         publication: Publication name
         pubdate: Publication date
         authors_affiliations: List of author-affiliation pairs
+        arxiv_id: ArXiv identifier if available
         
     Returns:
         Formatted details text
@@ -403,16 +444,30 @@ def _build_publication_details(journal: str, publication: str, pubdate: str,
     if formatted_pubdate != 'Unknown date':
         details_text += f"Publication Date: {formatted_pubdate}\n"
     
-    # Authors
+    # Authors - separate CfA and other authors
     if authors_affiliations:
-        authors = [entry["author"] for entry in authors_affiliations]
-        if len(authors) > 5:
-            author_text = f"Authors: {', '.join(authors[:3])}, et al. ({len(authors)} total authors)\n"
-        else:
-            author_text = f"Authors: {', '.join(authors)}\n"
-        details_text += author_text
+        cfa_authors, non_cfa_authors = classify_authors(authors_affiliations)
+        
+        # CfA Authors line
+        if cfa_authors:
+            if len(cfa_authors) <= 5:
+                cfa_text = f"CfA Authors: {', '.join(cfa_authors)}\n"
+            else:
+                cfa_text = f"CfA Authors: {', '.join(cfa_authors[:3])}, et al. ({len(cfa_authors)} total CfA authors)\n"
+            details_text += cfa_text
+        
+        # Other Authors line
+        if non_cfa_authors:
+            if len(non_cfa_authors) <= 5:
+                other_text = f"Other Authors: {', '.join(non_cfa_authors)}\n"
+            else:
+                other_text = f"Other Authors: {', '.join(non_cfa_authors[:3])}, et al. ({len(non_cfa_authors)} total other authors)\n"
+            details_text += other_text
     
-    # NASA ADS link placeholder
-    details_text += "Link: [View on NASA ADS]\n\n"
+    # Links section
+    details_text += "Links: [View on NASA ADS]"
+    if arxiv_id:
+        details_text += " | [View on ArXiv]"
+    details_text += "\n\n"
     
     return details_text

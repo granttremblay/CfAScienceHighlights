@@ -19,7 +19,7 @@ from datetime import datetime
 # Import our functionality
 try:
     from cfascience import fetch_abstracts
-    from utils import setup_environment, classify_authors, generate_summary
+    from utils import setup_environment, classify_authors, generate_summary, get_search_preferences
     from google_docs_formatter import (
         create_document_header, create_paper_content_requests,
         create_abstract_section_requests, create_summary_section_requests,
@@ -259,11 +259,11 @@ class GoogleDocsCreator:
                 print(f"Processing paper {i}: {title[:50]}..." if len(title) > 50 else f"Processing paper {i}: {title}")
                 
                 # Paper content (title, details)
-                paper_requests, current_index, link_info = create_paper_content_requests(paper, i, current_index)
+                paper_requests, current_index, link_infos = create_paper_content_requests(paper, i, current_index)
                 requests.extend(paper_requests)
                 
                 # Store link info for later application
-                if link_info:
+                for link_info in link_infos:
                     link_requests.append({
                         'updateTextStyle': {
                             'range': {
@@ -276,11 +276,6 @@ class GoogleDocsCreator:
                             'fields': 'link'
                         }
                     })
-                
-                # Abstract section
-                abstract = paper.get('abstract', 'No abstract available')
-                abstract_requests, current_index = create_abstract_section_requests(abstract, current_index)
-                requests.extend(abstract_requests)
                 
                 # Generate and add public summary
                 print(f"   Generating public summary...")
@@ -357,10 +352,17 @@ def _print_setup_instructions() -> None:
 
 
 def _fetch_papers() -> Optional[List[Dict[str, Any]]]:
-    """Fetch papers from NASA ADS."""
+    """Fetch papers from NASA ADS with user preferences."""
+    
+    # Get user preferences for search type
+    first_author_only, refereed_only = get_search_preferences()
+    
     print("Fetching papers from NASA ADS...")
     try:
-        papers = fetch_abstracts()  # Default CfA papers from 2025
+        papers = fetch_abstracts(
+            first_author_only=first_author_only,
+            refereed_only=refereed_only
+        )  # Default CfA papers from 2025
         if not papers:
             print("No papers found. Please check your NASA ADS API configuration.")
             return None
@@ -411,7 +413,7 @@ def _print_success_summary(docs_creator: GoogleDocsCreator, document_id: str, pa
     print(f"🕒 {timestamp}")
     print(f"🔗 Static URL: {doc_url}")
     print(f"📊 Papers included: {len(papers)}")
-    print("📝 Document includes: Professional Formatting, Timestamps, Paper Details, Styled Abstracts, and Enhanced AI Summaries")
+    print("📝 Document includes: Professional Formatting, Timestamps, Paper Details, Enhanced AI Summaries, and Clean Separators")
     print(f"💾 Document ID saved to {docs_creator.config_file} - this URL will never change!")
     
     # Print summary of processed papers

@@ -192,6 +192,56 @@ def generate_summary(client: OpenAI, title: str, abstract: str, year: str,
     return response.choices[0].message.content.strip()
 
 
+def get_search_preferences() -> tuple[bool, bool]:
+    """
+    Prompt user for search preferences.
+    
+    Returns:
+        Tuple of (first_author_only, refereed_only)
+    """
+    print(f"\n{Color.BOLD}{Color.CYAN}Search Configuration{Color.END}")
+    print("=" * 50)
+    
+    # First author vs any author
+    print(f"\n{Color.YELLOW}Author Position Preference:{Color.END}")
+    print("1. FIRST author papers only (papers where the affiliation appears as first author)")
+    print("2. ANY author papers (papers with any author from the affiliation)")
+    
+    while True:
+        author_choice = input(f"\n{Color.BOLD}Choose option (1 or 2): {Color.END}").strip()
+        if author_choice == "1":
+            first_author_only = True
+            print(f"{Color.GREEN}✓ Searching for FIRST author papers only{Color.END}")
+            break
+        elif author_choice == "2":
+            first_author_only = False
+            print(f"{Color.GREEN}✓ Searching for ANY author papers{Color.END}")
+            break
+        else:
+            print(f"{Color.RED}Please enter 1 or 2{Color.END}")
+    
+    # Refereed vs all papers
+    print(f"\n{Color.YELLOW}Publication Type:{Color.END}")
+    print("1. Refereed papers only (peer-reviewed)")
+    print("2. All papers (including preprints, conference proceedings, etc.)")
+    
+    while True:
+        ref_choice = input(f"\n{Color.BOLD}Choose option (1 or 2): {Color.END}").strip()
+        if ref_choice == "1":
+            refereed_only = True
+            print(f"{Color.GREEN}✓ Searching for refereed papers only{Color.END}")
+            break
+        elif ref_choice == "2":
+            refereed_only = False
+            print(f"{Color.GREEN}✓ Searching for all papers (including non-refereed){Color.END}")
+            break
+        else:
+            print(f"{Color.RED}Please enter 1 or 2{Color.END}")
+    
+    print()  # Add spacing
+    return first_author_only, refereed_only
+
+
 def format_author_list_for_display(authors_affiliations: List[Dict[str, str]]) -> List[str]:
     """
     Format author list for terminal display, highlighting CfA authors.
