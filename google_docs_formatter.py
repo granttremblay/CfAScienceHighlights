@@ -192,7 +192,7 @@ def format_publication_date(pubdate: str) -> str:
 
 
 def create_paper_content_requests(paper: Dict[str, Any], paper_index: int, 
-                                current_index: int) -> tuple[List[Dict[str, Any]], int]:
+                                current_index: int) -> tuple[List[Dict[str, Any]], int, Dict[str, Any]]:
     """
     Create requests for a single paper's content.
     
@@ -202,7 +202,7 @@ def create_paper_content_requests(paper: Dict[str, Any], paper_index: int,
         current_index: Current character index in the document
         
     Returns:
-        Tuple of (requests list, new current index)
+        Tuple of (requests list, new current index, link info dictionary)
     """
     requests = []
     
@@ -211,6 +211,7 @@ def create_paper_content_requests(paper: Dict[str, Any], paper_index: int,
     journal = paper.get('journal', '')
     publication = paper.get('publication', '')
     pubdate = paper.get('pubdate', 'Unknown date')
+    bibcode = paper.get('bibcode', '')
     authors_affiliations = paper.get('authors_affiliations', [])
     abstract = paper.get('abstract', 'No abstract available')
     
@@ -228,9 +229,31 @@ def create_paper_content_requests(paper: Dict[str, Any], paper_index: int,
     ))
     current_index += len(paper_title_text)
     
-    # Publication details
+    # Publication details  
     details_text = _build_publication_details(journal, publication, pubdate, authors_affiliations)
+    link_info = {}
+    
     if details_text:
+        # Find the position of the "[View on NASA ADS]" text for linking
+        link_start_in_details = details_text.find('[View on NASA ADS]')
+        if link_start_in_details != -1:
+            link_start = current_index + link_start_in_details
+            link_end = link_start + len('[View on NASA ADS]')
+            
+            # Create proper ADS URL
+            if bibcode:
+                ads_url = f"https://ui.adsabs.harvard.edu/abs/{bibcode}/abstract"
+            else:
+                # Fallback to search if no bibcode
+                title_encoded = title.replace(' ', '+').replace('&', '%26')
+                ads_url = f"https://ui.adsabs.harvard.edu/search/q={title_encoded}"
+            
+            link_info = {
+                'start_index': link_start,
+                'end_index': link_end,
+                'url': ads_url
+            }
+        
         requests.append(create_text_request(details_text, current_index))
         requests.append(create_style_request(
             current_index, current_index + len(details_text),
@@ -238,7 +261,7 @@ def create_paper_content_requests(paper: Dict[str, Any], paper_index: int,
         ))
         current_index += len(details_text)
     
-    return requests, current_index
+    return requests, current_index, link_info
 
 
 def create_abstract_section_requests(abstract: str, current_index: int) -> tuple[List[Dict[str, Any]], int]:

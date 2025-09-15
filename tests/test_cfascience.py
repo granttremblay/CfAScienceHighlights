@@ -209,6 +209,7 @@ class TestFetchAbstracts:
                         "journal": "Test Journal",
                         "pub": "Test Publication",
                         "pubdate": "2025-01-01",
+                        "bibcode": "2025TestJ...1..123S",
                         "author": ["Smith, John"],
                         "aff": ["Harvard-Smithsonian CfA"]
                     }
@@ -223,6 +224,7 @@ class TestFetchAbstracts:
         assert result[0]["title"] == "Test Paper Title"
         assert result[0]["abstract"] == "This is a test abstract"
         assert result[0]["year"] == "2025"
+        assert result[0]["bibcode"] == "2025TestJ...1..123S"
         assert len(result[0]["authors_affiliations"]) == 1
         
         # Verify API was called with correct parameters
@@ -265,6 +267,7 @@ class TestFetchAbstracts:
         assert result[0]["title"] == "Minimal Paper"
         assert result[0]["abstract"] == ""
         assert result[0]["year"] == ""
+        assert result[0]["bibcode"] == ""
         assert result[0]["authors_affiliations"] == []
     
     @patch('cfascience.requests.get')

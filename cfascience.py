@@ -135,7 +135,7 @@ def fetch_abstracts(affiliation_string: Optional[str] = None,
     query = build_query(affiliation_string, start_year, end_year)
     params = {
         "q": query,
-        "fl": "title,abstract,year,author,aff,journal,pub,pubdate",
+        "fl": "title,abstract,year,author,aff,journal,pub,pubdate,bibcode",
         "sort": "date desc",
         "rows": 10
     }
@@ -158,6 +158,7 @@ def fetch_abstracts(affiliation_string: Optional[str] = None,
         journal = doc.get("journal", "")
         publication = doc.get("pub", "")
         pubdate = doc.get("pubdate", "")
+        bibcode = doc.get("bibcode", "")
         authors_affiliations = extract_authors_affiliations(doc)
         
         abstracts.append({
@@ -167,6 +168,7 @@ def fetch_abstracts(affiliation_string: Optional[str] = None,
             "journal": journal,
             "publication": publication,
             "pubdate": pubdate,
+            "bibcode": bibcode,
             "authors_affiliations": authors_affiliations
         })
     

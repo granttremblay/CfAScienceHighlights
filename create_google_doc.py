@@ -246,6 +246,7 @@ class GoogleDocsCreator:
         """
         try:
             requests = []
+            link_requests = []
             current_index = 1
             
             # Create document header
@@ -258,8 +259,23 @@ class GoogleDocsCreator:
                 print(f"Processing paper {i}: {title[:50]}..." if len(title) > 50 else f"Processing paper {i}: {title}")
                 
                 # Paper content (title, details)
-                paper_requests, current_index = create_paper_content_requests(paper, i, current_index)
+                paper_requests, current_index, link_info = create_paper_content_requests(paper, i, current_index)
                 requests.extend(paper_requests)
+                
+                # Store link info for later application
+                if link_info:
+                    link_requests.append({
+                        'updateTextStyle': {
+                            'range': {
+                                'startIndex': link_info['start_index'],
+                                'endIndex': link_info['end_index']
+                            },
+                            'textStyle': {
+                                'link': {'url': link_info['url']}
+                            },
+                            'fields': 'link'
+                        }
+                    })
                 
                 # Abstract section
                 abstract = paper.get('abstract', 'No abstract available')
@@ -279,12 +295,15 @@ class GoogleDocsCreator:
             # Apply justified alignment to the entire document
             requests.append(create_justification_request(current_index))
             
-            # Execute all requests in batch
+            # Execute all content requests in batch
             result = self.service.documents().batchUpdate(
                 documentId=document_id, body={'requests': requests}).execute()
             
-            # Add hyperlinks (requires separate pass)
-            self._add_hyperlinks_to_document(document_id, papers)
+            # Apply hyperlinks in a separate batch (after content is created)
+            if link_requests:
+                print("Applying hyperlinks...")
+                self.service.documents().batchUpdate(
+                    documentId=document_id, body={'requests': link_requests}).execute()
             
             print("Document formatting applied successfully!")
             return result
@@ -293,88 +312,6 @@ class GoogleDocsCreator:
             print(f'An error occurred adding content: {error}')
             return None
     
-    def _add_hyperlinks_to_document(self, document_id: str, papers: List[Dict[str, Any]]) -> None:
-        """
-        Add hyperlinks to NASA ADS for each paper.
-        
-        Args:
-            document_id: ID of the Google Doc to update
-            papers: List of paper dictionaries
-        """
-        try:
-            # Get current document content to find link positions
-            doc = self.service.documents().get(documentId=document_id).execute()
-            content = doc.get('body').get('content')
-            
-            requests = []
-            
-            # Search for "[View on NASA ADS]" text and replace with hyperlinks
-            for element in content:
-                if 'paragraph' in element:
-                    paragraph = element['paragraph']
-                    if 'elements' in paragraph:
-                        for elem in paragraph['elements']:
-                            if 'textRun' in elem:
-                                text = elem['textRun']['content']
-                                if '[View on NASA ADS]' in text:
-                                    start_index = elem['startIndex']
-                                    # Find the position of the link text
-                                    link_start = start_index + text.find('[View on NASA ADS]')
-                                    link_end = link_start + len('[View on NASA ADS]')
-                                    
-                                    # Create a generic NASA ADS search URL
-                                    paper_index = self._find_paper_index_for_position(doc, link_start)
-                                    if paper_index < len(papers):
-                                        title = papers[paper_index]['title'].replace(' ', '+')
-                                        ads_url = f"https://ui.adsabs.harvard.edu/search/q={title}"
-                                        
-                                        requests.append({
-                                            'updateTextStyle': {
-                                                'range': {
-                                                    'startIndex': link_start,
-                                                    'endIndex': link_end
-                                                },
-                                                'textStyle': {
-                                                    'link': {'url': ads_url}
-                                                },
-                                                'fields': 'link'
-                                            }
-                                        })
-            
-            if requests:
-                self.service.documents().batchUpdate(
-                    documentId=document_id, body={'requests': requests}).execute()
-                    
-        except HttpError as error:
-            print(f'An error occurred adding hyperlinks: {error}')
-    
-    def _find_paper_index_for_position(self, doc: Dict[str, Any], position: int) -> int:
-        """
-        Helper method to determine which paper a given text position belongs to.
-        
-        Args:
-            doc: Document object from Google Docs API
-            position: Character position in the document
-            
-        Returns:
-            Index of the paper (0-based)
-        """
-        content = doc.get('body').get('content', [])
-        paper_count = 0
-        current_pos = 0
-        
-        for element in content:
-            if 'paragraph' in element:
-                for elem in element['paragraph'].get('elements', []):
-                    if 'textRun' in elem:
-                        text = elem['textRun']['content']
-                        if text.strip().startswith(f"{paper_count + 1}."):
-                            if current_pos <= position < current_pos + len(text):
-                                return paper_count
-                            paper_count += 1
-                        current_pos += len(text)
-        
-        return min(paper_count, 9)  # Cap at 9 since we have 10 papers (0-indexed)
 
 
 def main() -> None:
