@@ -17,6 +17,7 @@ class Color:
     CYAN = '\033[96m'
     GREEN = '\033[92m'
     YELLOW = '\033[93m'
+    RED = '\033[91m'
     MAGENTA = '\033[35m'  # For CfA authors
     PURPLE = '\033[95m'
     BOLD = '\033[1m'
@@ -208,17 +209,17 @@ def get_search_preferences() -> tuple[bool, bool]:
     print("2. ANY author papers (papers with any author from the affiliation)")
     
     while True:
-        author_choice = input(f"\n{Color.BOLD}Choose option (1 or 2): {Color.END}").strip()
-        if author_choice == "1":
+        author_choice = input(f"\n{Color.BOLD}Choose option (1 or 2): {Color.END}").strip().lower()
+        if author_choice in ["1", "first", "f"]:
             first_author_only = True
             print(f"{Color.GREEN}✓ Searching for FIRST author papers only{Color.END}")
             break
-        elif author_choice == "2":
+        elif author_choice in ["2", "any", "a"]:
             first_author_only = False
             print(f"{Color.GREEN}✓ Searching for ANY author papers{Color.END}")
             break
         else:
-            print(f"{Color.RED}Please enter 1 or 2{Color.END}")
+            print(f"{Color.RED}Invalid choice '{author_choice}'. Please enter 1 or 2.{Color.END}")
     
     # Refereed vs all papers
     print(f"\n{Color.YELLOW}Publication Type:{Color.END}")
@@ -226,17 +227,17 @@ def get_search_preferences() -> tuple[bool, bool]:
     print("2. All papers (including preprints, conference proceedings, etc.)")
     
     while True:
-        ref_choice = input(f"\n{Color.BOLD}Choose option (1 or 2): {Color.END}").strip()
-        if ref_choice == "1":
+        ref_choice = input(f"\n{Color.BOLD}Choose option (1 or 2): {Color.END}").strip().lower()
+        if ref_choice in ["1", "refereed", "ref", "r"]:
             refereed_only = True
             print(f"{Color.GREEN}✓ Searching for refereed papers only{Color.END}")
             break
-        elif ref_choice == "2":
+        elif ref_choice in ["2", "all", "any", "a"]:
             refereed_only = False
             print(f"{Color.GREEN}✓ Searching for all papers (including non-refereed){Color.END}")
             break
         else:
-            print(f"{Color.RED}Please enter 1 or 2{Color.END}")
+            print(f"{Color.RED}Invalid choice '{ref_choice}'. Please enter 1 or 2.{Color.END}")
     
     print()  # Add spacing
     return first_author_only, refereed_only

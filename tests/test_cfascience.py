@@ -374,7 +374,7 @@ class TestColorConstants:
     def test_color_constants_exist(self):
         """Test that all expected color constants exist."""
         expected_colors = [
-            'CYAN', 'GREEN', 'YELLOW', 'MAGENTA', 'PURPLE', 'BOLD', 'END'
+            'CYAN', 'GREEN', 'YELLOW', 'RED', 'MAGENTA', 'PURPLE', 'BOLD', 'END'
         ]
         
         for color in expected_colors:
@@ -384,7 +384,7 @@ class TestColorConstants:
     def test_ansi_codes_format(self):
         """Test that color codes follow ANSI format."""
         # Most ANSI codes start with \033[
-        colors_to_test = ['PURPLE', 'CYAN', 'BOLD', 'END']
+        colors_to_test = ['PURPLE', 'CYAN', 'RED', 'GREEN', 'BOLD', 'END']
         
         for color_name in colors_to_test:
             color_code = getattr(Color, color_name)
