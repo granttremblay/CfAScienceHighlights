@@ -16,7 +16,6 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from datetime import datetime
 
-# Import our functionality
 try:
     from cfascience import fetch_abstracts
     from utils import setup_environment, classify_authors, generate_summary, get_search_preferences
@@ -30,10 +29,8 @@ except ImportError as e:
     print("Make sure all required files are in the same directory.")
     sys.exit(1)
 
-# Initialize environment and OpenAI client
 _, openai_client = setup_environment()
 
-# Google API scopes
 SCOPES = ['https://www.googleapis.com/auth/documents']
 
 class GoogleDocsCreator:
@@ -60,11 +57,9 @@ class GoogleDocsCreator:
         """Authenticate with Google API and build the docs service."""
         creds = None
         
-        # Load existing token if available
         if os.path.exists(self.token_file):
             creds = Credentials.from_authorized_user_file(self.token_file, SCOPES)
         
-        # If there are no (valid) credentials available, prompt user to log in
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
@@ -79,7 +74,6 @@ class GoogleDocsCreator:
                     self.credentials_file, SCOPES)
                 creds = flow.run_local_server(port=0)
                 
-            # Save the credentials for the next run
             with open(self.token_file, 'w') as token:
                 token.write(creds.to_json())
         
@@ -131,15 +125,12 @@ class GoogleDocsCreator:
             document_id: ID of the Google Doc to clear
         """
         try:
-            # Get current document to find the end index
             doc = self.service.documents().get(documentId=document_id).execute()
             content = doc.get('body').get('content', [])
             
-            # Find the actual end index by looking at the last element with content
             end_index = 1
             for element in content:
                 if 'paragraph' in element:
-                    # Check if paragraph has actual content (not just empty)
                     paragraph = element['paragraph']
                     if 'elements' in paragraph:
                         for elem in paragraph['elements']:
@@ -148,8 +139,7 @@ class GoogleDocsCreator:
                 elif 'endIndex' in element:
                     end_index = max(end_index, element['endIndex'])
             
-            # Only delete content if there's actually content to delete (more than just the initial empty paragraph)
-            if end_index > 2:  # Changed from > 1 to > 2 to account for initial empty paragraph
+            if end_index > 2:
                 requests = [{
                     'deleteContentRange': {
                         'range': {
@@ -168,7 +158,6 @@ class GoogleDocsCreator:
             return True
             
         except HttpError as error:
-            # If the error is about empty range, that's actually fine - document is already empty
             if "The range should not be empty" in str(error):
                 print("Document is already empty - no content to clear.")
                 return True
@@ -187,7 +176,6 @@ class GoogleDocsCreator:
             Document ID of the static document
         """
         if self.static_doc_id:
-            # Verify the document still exists
             try:
                 self.service.documents().get(documentId=self.static_doc_id).execute()
                 print(f"Using existing static document: {self.static_doc_id}")
@@ -196,15 +184,12 @@ class GoogleDocsCreator:
                 print("Static document no longer exists, creating new one...")
                 self.static_doc_id = None
         
-        # Create new document
         doc_id = self.create_document(title)
         if doc_id:
             self.save_document_id(doc_id)
             print(f"Created new static document: {doc_id}")
             print("This document ID will be reused for all future runs.")
         return doc_id
-    
-    
     def generate_paper_summary(self, paper: Dict[str, Any]) -> str:
         """
         Generate a public-facing summary for a paper using OpenAI.
@@ -258,11 +243,9 @@ class GoogleDocsCreator:
                 title = paper.get('title', 'No title available')
                 print(f"Processing paper {i}: {title[:50]}..." if len(title) > 50 else f"Processing paper {i}: {title}")
                 
-                # Paper content (title, details)
                 paper_requests, current_index, link_infos = create_paper_content_requests(paper, i, current_index)
                 requests.extend(paper_requests)
                 
-                # Store link info for later application
                 for link_info in link_infos:
                     link_requests.append({
                         'updateTextStyle': {
@@ -277,24 +260,19 @@ class GoogleDocsCreator:
                         }
                     })
                 
-                # Generate and add public summary
                 print(f"   Generating public summary...")
                 summary = self.generate_paper_summary(paper)
                 summary_requests, current_index = create_summary_section_requests(summary, current_index)
                 requests.extend(summary_requests)
                 
-                # Add separator
                 separator_requests, current_index = create_separator_requests(current_index)
                 requests.extend(separator_requests)
             
-            # Apply justified alignment to the entire document
             requests.append(create_justification_request(current_index))
             
-            # Execute all content requests in batch
             result = self.service.documents().batchUpdate(
                 documentId=document_id, body={'requests': requests}).execute()
             
-            # Apply hyperlinks in a separate batch (after content is created)
             if link_requests:
                 print("Applying hyperlinks...")
                 self.service.documents().batchUpdate(
@@ -353,8 +331,6 @@ def _print_setup_instructions() -> None:
 
 def _fetch_papers() -> Optional[List[Dict[str, Any]]]:
     """Fetch papers from NASA ADS with user preferences."""
-    
-    # Get user preferences for search type
     first_author_only, refereed_only = get_search_preferences()
     
     print("Fetching papers from NASA ADS...")
@@ -362,7 +338,7 @@ def _fetch_papers() -> Optional[List[Dict[str, Any]]]:
         papers = fetch_abstracts(
             first_author_only=first_author_only,
             refereed_only=refereed_only
-        )  # Default CfA papers from 2025
+        )
         if not papers:
             print("No papers found. Please check your NASA ADS API configuration.")
             return None
@@ -376,7 +352,6 @@ def _fetch_papers() -> Optional[List[Dict[str, Any]]]:
 
 def _process_document(docs_creator: GoogleDocsCreator, papers: List[Dict[str, Any]]) -> Optional[str]:
     """Process the Google Doc with paper content."""
-    # Get or create the static document
     print("Getting static Google Doc...")
     doc_title = "Recent CfA-affiliated Science Publications"
     document_id = docs_creator.get_or_create_static_document(doc_title)
@@ -385,13 +360,11 @@ def _process_document(docs_creator: GoogleDocsCreator, papers: List[Dict[str, An
         print("Failed to get or create document")
         return None
     
-    # Clear existing content
     print("Clearing existing content...")
     if not docs_creator.clear_document_content(document_id):
         print("Failed to clear document content")
         return None
     
-    # Add content
     print("Adding content to document (this may take several minutes for AI summaries)...")
     print("Progress will be shown for each paper as it's processed.\n")
     result = docs_creator.add_content_to_document(document_id, papers)
@@ -404,7 +377,6 @@ def _print_success_summary(docs_creator: GoogleDocsCreator, document_id: str, pa
     doc_url = f"https://docs.google.com/document/d/{document_id}/edit"
     doc_title = "Recent CfA-affiliated Science Publications"
     
-    # Generate timestamp for display
     now = datetime.now()
     timestamp = now.strftime("Generated on %A, %B %d, %Y at %I:%M%p")
     
@@ -416,7 +388,6 @@ def _print_success_summary(docs_creator: GoogleDocsCreator, document_id: str, pa
     print("📝 Document includes: Professional Formatting, Timestamps, Paper Details, Enhanced AI Summaries, and Clean Separators")
     print(f"💾 Document ID saved to {docs_creator.config_file} - this URL will never change!")
     
-    # Print summary of processed papers
     print("\nPapers processed:")
     for i, paper in enumerate(papers, 1):
         title = paper.get('title', 'No title')[:60]

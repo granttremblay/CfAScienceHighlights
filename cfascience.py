@@ -35,9 +35,6 @@ ADS_HEADERS = {
     "Authorization": f"Bearer {ADS_API_TOKEN}"
 }
 
-# Default query parameters - now handled dynamically in build_query()
-
-
 def build_query(affiliation_string: Optional[str] = None, 
                 start_year: Optional[int] = None, 
                 end_year: Optional[int] = None,
@@ -56,31 +53,25 @@ def build_query(affiliation_string: Optional[str] = None,
     Returns:
         The formatted query string
     """
-    # Default affiliation string for CfA/Smithsonian
     if affiliation_string is None:
         if first_author_only:
             affiliation_string = 'pos(aff:"02138",1) pos(aff:"Smithsonian",1)'
         else:
             affiliation_string = 'aff:"02138" OR aff:"Smithsonian"'
     else:
-        # If custom affiliation provided, modify it based on first_author_only setting
         if first_author_only and not affiliation_string.startswith('pos('):
-            # Wrap custom affiliation in pos() for first author search
             affiliation_string = f'pos({affiliation_string},1)'
 
-    # Default year range
     if start_year is None:
         start_year = 2025
     if end_year is None:
         end_year = start_year
 
-    # Build year part of query
     if start_year == end_year:
         year_part = f'year:{start_year}'
     else:
         year_part = f'year:{start_year}-{end_year}'
 
-    # Build the query
     query_parts = [affiliation_string, year_part]
     
     if refereed_only:
@@ -112,7 +103,6 @@ def print_authors_affiliations(authors_affiliations: List[Dict[str, str]]) -> No
         else:
             other_authors_with_aff.append((author, affiliation))
 
-    # Print CfA authors first, highlighted
     if cfa_authors_with_aff:
         print(f"  {Color.BOLD}{Color.YELLOW}CfA Authors:{Color.END}")
         for author, affiliation in cfa_authors_with_aff:
@@ -120,9 +110,8 @@ def print_authors_affiliations(authors_affiliations: List[Dict[str, str]]) -> No
             aff_str = f"{Color.GREEN}{affiliation}{Color.END}"
             print(f"    • {author_str} ({aff_str})")
 
-    # Print other authors
     if other_authors_with_aff:
-        if cfa_authors_with_aff:  # Add separator if we have both types
+        if cfa_authors_with_aff:
             print()
         print(f"  {Color.BOLD}Other Authors:{Color.END}")
         for author, affiliation in other_authors_with_aff:
@@ -185,7 +174,6 @@ def fetch_abstracts(affiliation_string: Optional[str] = None,
         identifiers = doc.get("identifier", [])
         authors_affiliations = extract_authors_affiliations(doc)
         
-        # Extract ArXiv ID from identifiers
         arxiv_id = None
         if identifiers:
             for identifier in identifiers:
@@ -231,14 +219,12 @@ def summarize_abstracts(abstracts: List[Dict]) -> List[Dict[str, str]]:
             sys.stdout.write(f"\rGenerating summary... {next(spinner)}")
             sys.stdout.flush()
             time.sleep(0.1)
-        sys.stdout.write("\r" + " "*30 + "\r")  # Clear line
+        sys.stdout.write("\r" + " "*30 + "\r")
 
     for abs_data in abstracts:
-        # Classify authors
         authors_affiliations = abs_data.get('authors_affiliations', [])
         cfa_authors, non_cfa_authors = classify_authors(authors_affiliations)
         
-        # Generate summary with spinner
         stop_event = threading.Event()
         spinner_thread = threading.Thread(target=spinner_running, args=(stop_event,))
         spinner_thread.start()
@@ -321,32 +307,27 @@ def main() -> None:
         print("No abstracts found.")
         return
 
-    # Show what search parameters were used
     year_display = f"{args.start_year or 2025}" + \
         (f"-{args.end_year}" if args.end_year and args.end_year !=
          (args.start_year or 2025) else "")
     affiliation_display = "CfA-affiliated" if not args.affiliation else "custom affiliation"
 
-    # Print a numbered list of the most recent 10 papers with title and author list
     print(
         f"Most recent 10 papers from {affiliation_display} authors ({year_display}):")
     for idx, abs_data in enumerate(abstracts, 1):
         title = abs_data.get('title', '(no title)')
         print(f"{idx}. {Color.BOLD}{Color.CYAN}{title}{Color.END}")
 
-        # Format and print authors with CfA authors highlighted
         author_lines = format_author_list_for_display(
             abs_data.get('authors_affiliations', []))
         for line in author_lines:
             print(line)
 
-        print()  # Add an empty line between papers
+        print()
 
-    # Ask user which abstracts to summarize
     selection = input(
         "\nEnter the numbers of the abstracts to summarize (comma-separated, e.g. 1,3,5) or 'n' to exit: ")
 
-    # Check if user wants to exit
     if selection.lower().strip() == 'n':
         print("Exiting without generating summaries.")
         return

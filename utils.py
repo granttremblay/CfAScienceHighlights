@@ -13,12 +13,11 @@ from dotenv import load_dotenv
 
 class Color:
     """ANSI color codes for terminal text formatting."""
-    # Core colors used in the application
     CYAN = '\033[96m'
     GREEN = '\033[92m'
     YELLOW = '\033[93m'
     RED = '\033[91m'
-    MAGENTA = '\033[35m'  # For CfA authors
+    MAGENTA = '\033[35m'
     PURPLE = '\033[95m'
     BOLD = '\033[1m'
     END = '\033[0m'
@@ -172,7 +171,6 @@ def generate_summary(client: OpenAI, title: str, abstract: str, year: str,
     if author_context:
         prompt_parts.append(author_context)
     
-    # Build the instruction part
     instruction = "Write a public-facing summary in two paragraphs for a general audience."
     if cfa_authors:
         instruction += (" If there are CfA authors listed, specifically highlight their contribution "

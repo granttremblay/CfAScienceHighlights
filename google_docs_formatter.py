@@ -13,7 +13,6 @@ from utils import classify_authors
 class GoogleDocsStyle:
     """Constants for Google Docs formatting styles."""
     
-    # Font sizes (in points)
     TITLE_SIZE = 18
     SECTION_SIZE = 14
     PAPER_TITLE_SIZE = 13
@@ -22,7 +21,6 @@ class GoogleDocsStyle:
     DETAIL_SIZE = 10
     TIMESTAMP_SIZE = 12
     
-    # Colors (RGB values 0-1)
     COLORS = {
         'title': {'red': 0.1, 'green': 0.1, 'blue': 0.1},
         'section': {'red': 0.2, 'green': 0.4, 'blue': 0.8},
@@ -33,7 +31,6 @@ class GoogleDocsStyle:
         'separator': {'red': 0.8, 'green': 0.8, 'blue': 0.8}
     }
     
-    # Font family
     FONT_FAMILY = 'Roboto'
 
 
@@ -95,7 +92,6 @@ def create_style_request(start_index: int, end_index: int,
         text_style['foregroundColor'] = {'color': {'rgbColor': color}}
         fields.append('foregroundColor')
     
-    # Always set font family
     text_style['weightedFontFamily'] = {
         'fontFamily': GoogleDocsStyle.FONT_FAMILY, 
         'weight': font_weight
@@ -385,11 +381,10 @@ def create_separator_requests(current_index: int) -> tuple[List[Dict[str, Any]],
     """
     requests = []
     
-    # Use a simple, clean separator with proper spacing
     separator_text = "\n" + ("_" * 50) + "\n\n"
     requests.append(create_text_request(separator_text, current_index))
     requests.append(create_style_request(
-        current_index + 1, current_index + 1 + 50,  # Style just the underscores
+        current_index + 1, current_index + 1 + 50,
         color=GoogleDocsStyle.COLORS['separator'],
         font_size=GoogleDocsStyle.DETAIL_SIZE
     ))
