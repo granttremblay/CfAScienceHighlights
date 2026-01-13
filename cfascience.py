@@ -13,6 +13,7 @@ import time
 import threading
 import itertools
 import argparse
+from datetime import datetime
 from typing import List, Dict, Optional
 
 # Third-party imports
@@ -25,15 +26,8 @@ from utils import (
     get_search_preferences
 )
 
-
-# Initialize environment and API clients
-ADS_API_TOKEN, client = setup_environment()
-
-# ADS API endpoint and headers
+# ADS API endpoint
 ADS_API_URL = "https://api.adsabs.harvard.edu/v1/search/query"
-ADS_HEADERS = {
-    "Authorization": f"Bearer {ADS_API_TOKEN}"
-}
 
 def build_query(affiliation_string: Optional[str] = None, 
                 start_year: Optional[int] = None, 
@@ -63,7 +57,7 @@ def build_query(affiliation_string: Optional[str] = None,
             affiliation_string = f'pos({affiliation_string},1)'
 
     if start_year is None:
-        start_year = 2025
+        start_year = datetime.now().year
     if end_year is None:
         end_year = start_year
 
@@ -78,10 +72,6 @@ def build_query(affiliation_string: Optional[str] = None,
         query_parts.append('property:refereed')
 
     return ' '.join(query_parts)
-
-
-
-
 
 
 def print_authors_affiliations(authors_affiliations: List[Dict[str, str]]) -> None:
@@ -123,8 +113,9 @@ def print_authors_affiliations(authors_affiliations: List[Dict[str, str]]) -> No
                 print(f"    • {author_str}")
 
 
-def fetch_abstracts(affiliation_string: Optional[str] = None, 
-                    start_year: Optional[int] = None, 
+def fetch_abstracts(ads_api_token: str,
+                    affiliation_string: Optional[str] = None,
+                    start_year: Optional[int] = None,
                     end_year: Optional[int] = None,
                     first_author_only: bool = False,
                     refereed_only: bool = True) -> List[Dict]:
@@ -132,18 +123,20 @@ def fetch_abstracts(affiliation_string: Optional[str] = None,
     Fetch abstracts from NASA ADS API with custom search parameters.
 
     Args:
+        ads_api_token: NASA ADS API token for authentication
         affiliation_string: Custom affiliation string (default: CfA/Smithsonian)
-        start_year: Start year for search (default: 2025)
+        start_year: Start year for search (default: current year)
         end_year: End year for search (default: same as start_year)
         first_author_only: If True, search only first author affiliations
         refereed_only: If True, include only refereed publications
 
     Returns:
         List of dictionaries containing abstract data
-        
+
     Raises:
         requests.RequestException: If the API request fails
     """
+    headers = {"Authorization": f"Bearer {ads_api_token}"}
     query = build_query(affiliation_string, start_year, end_year, first_author_only, refereed_only)
     params = {
         "q": query,
@@ -154,7 +147,7 @@ def fetch_abstracts(affiliation_string: Optional[str] = None,
 
     response = requests.get(
         ADS_API_URL,
-        headers=ADS_HEADERS,
+        headers=headers,
         params=params,
         timeout=30
     )
@@ -196,9 +189,7 @@ def fetch_abstracts(affiliation_string: Optional[str] = None,
     return abstracts
 
 
-
-
-def summarize_abstracts(abstracts: List[Dict]) -> List[Dict[str, str]]:
+def summarize_abstracts(abstracts: List[Dict], openai_client) -> List[Dict[str, str]]:
     """
     Generate public-facing summaries for abstracts using OpenAI's GPT model.
 
@@ -206,6 +197,7 @@ def summarize_abstracts(abstracts: List[Dict]) -> List[Dict[str, str]]:
 
     Args:
         abstracts: List of abstract data dictionaries
+        openai_client: OpenAI client instance for generating summaries
 
     Returns:
         List of dictionaries containing title, year, and summary
@@ -224,14 +216,14 @@ def summarize_abstracts(abstracts: List[Dict]) -> List[Dict[str, str]]:
     for abs_data in abstracts:
         authors_affiliations = abs_data.get('authors_affiliations', [])
         cfa_authors, non_cfa_authors = classify_authors(authors_affiliations)
-        
+
         stop_event = threading.Event()
         spinner_thread = threading.Thread(target=spinner_running, args=(stop_event,))
         spinner_thread.start()
-        
+
         try:
             summary = generate_summary(
-                client=client,
+                client=openai_client,
                 title=abs_data['title'],
                 abstract=abs_data['abstract'],
                 year=abs_data['year'],
@@ -289,13 +281,17 @@ Examples:
 
 
 def main() -> None:
+    # Initialize environment and API clients
+    ads_api_token, openai_client = setup_environment()
+
     args = parse_arguments()
-    
+
     # Get user preferences for search type
     first_author_only, refereed_only = get_search_preferences()
 
     # Pass the command line arguments and user preferences to fetch_abstracts
     abstracts = fetch_abstracts(
+        ads_api_token=ads_api_token,
         affiliation_string=args.affiliation,
         start_year=args.start_year,
         end_year=args.end_year,
@@ -307,9 +303,12 @@ def main() -> None:
         print("No abstracts found.")
         return
 
-    year_display = f"{args.start_year or 2025}" + \
-        (f"-{args.end_year}" if args.end_year and args.end_year !=
-         (args.start_year or 2025) else "")
+    current_year = datetime.now().year
+    start_year = args.start_year or current_year
+    if args.end_year and args.end_year != start_year:
+        year_display = f"{start_year}-{args.end_year}"
+    else:
+        year_display = str(start_year)
     affiliation_display = "CfA-affiliated" if not args.affiliation else "custom affiliation"
 
     print(
@@ -334,8 +333,9 @@ def main() -> None:
 
     try:
         selected_indices = [
-            int(x.strip())-1 for x in selection.split(',') if x.strip().isdigit()]
-    except Exception:
+            int(part) - 1 for part in (x.strip() for x in selection.split(',')) if part.isdigit()
+        ]
+    except ValueError:
         print("Invalid input. Exiting.")
         return
     selected_indices = [i for i in selected_indices if 0 <= i < len(abstracts)]
@@ -344,7 +344,7 @@ def main() -> None:
         return
 
     selected_abstracts = [abstracts[i] for i in selected_indices]
-    summaries = summarize_abstracts(selected_abstracts)
+    summaries = summarize_abstracts(selected_abstracts, openai_client)
     for i, s in enumerate(summaries):
         abs_data = selected_abstracts[i]
         print(

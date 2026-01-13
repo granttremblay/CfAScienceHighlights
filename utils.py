@@ -67,25 +67,28 @@ def is_cfa_affiliated(affiliation: Optional[str]) -> bool:
 def classify_authors(authors_affiliations: List[Dict[str, str]]) -> tuple[List[str], List[str]]:
     """
     Classify authors into CfA-affiliated and non-CfA groups.
-    
+
     Args:
         authors_affiliations: List of dictionaries with 'author' and 'affiliation' keys
-        
+
     Returns:
         tuple: (cfa_authors, non_cfa_authors) - both as lists of author names
     """
     cfa_authors = []
     non_cfa_authors = []
-    
+
     for entry in authors_affiliations:
-        author = entry["author"]
-        affiliation = entry["affiliation"]
-        
+        author = entry.get("author", "")
+        affiliation = entry.get("affiliation", "")
+
+        if not author:
+            continue
+
         if is_cfa_affiliated(affiliation):
             cfa_authors.append(author)
         else:
             non_cfa_authors.append(author)
-    
+
     return cfa_authors, non_cfa_authors
 
 

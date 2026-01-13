@@ -29,31 +29,34 @@ except ImportError as e:
     print("Make sure all required files are in the same directory.")
     sys.exit(1)
 
-_, openai_client = setup_environment()
-
+# Constants
 SCOPES = ['https://www.googleapis.com/auth/documents']
+DEFAULT_DOC_TITLE = "Recent CfA-affiliated Science Publications"
 
 class GoogleDocsCreator:
     """Handles Google Docs API operations for creating science highlights documents."""
-    
-    def __init__(self, credentials_file: str = 'credentials.json', 
-                 token_file: str = 'token.json', 
+
+    def __init__(self, openai_client,
+                 credentials_file: str = 'credentials.json',
+                 token_file: str = 'token.json',
                  config_file: str = 'google_doc_config.txt'):
         """
         Initialize the Google Docs creator.
-        
+
         Args:
+            openai_client: OpenAI client instance for generating summaries
             credentials_file: Path to the OAuth2 credentials JSON file
             token_file: Path to store the access token
             config_file: Path to store the static document ID
         """
+        self.openai_client = openai_client
         self.credentials_file = credentials_file
         self.token_file = token_file
         self.config_file = config_file
         self.service = None
         self.static_doc_id = self.load_document_id()
         
-    def authenticate(self):
+    def authenticate(self) -> bool:
         """Authenticate with Google API and build the docs service."""
         creds = None
         
@@ -84,14 +87,14 @@ class GoogleDocsCreator:
             print(f'An error occurred: {error}')
             return False
     
-    def load_document_id(self):
+    def load_document_id(self) -> Optional[str]:
         """Load the static document ID from config file."""
         if os.path.exists(self.config_file):
             with open(self.config_file, 'r', encoding='utf-8') as f:
                 return f.read().strip()
         return None
-    
-    def save_document_id(self, doc_id):
+
+    def save_document_id(self, doc_id: str) -> None:
         """Save the static document ID to config file."""
         with open(self.config_file, 'w', encoding='utf-8') as f:
             f.write(doc_id)
@@ -117,12 +120,15 @@ class GoogleDocsCreator:
             print(f'An error occurred creating document: {error}')
             return None
     
-    def clear_document_content(self, document_id):
+    def clear_document_content(self, document_id: str) -> bool:
         """
         Clear all content from an existing Google Doc.
-        
+
         Args:
             document_id: ID of the Google Doc to clear
+
+        Returns:
+            True if successful, False otherwise
         """
         try:
             doc = self.service.documents().get(documentId=document_id).execute()
@@ -190,13 +196,14 @@ class GoogleDocsCreator:
             print(f"Created new static document: {doc_id}")
             print("This document ID will be reused for all future runs.")
         return doc_id
+
     def generate_paper_summary(self, paper: Dict[str, Any]) -> str:
         """
         Generate a public-facing summary for a paper using OpenAI.
-        
+
         Args:
             paper: Paper dictionary containing title, abstract, year, and authors_affiliations
-            
+
         Returns:
             Generated summary string
         """
@@ -204,9 +211,9 @@ class GoogleDocsCreator:
             # Classify authors for context
             authors_affiliations = paper.get('authors_affiliations', [])
             cfa_authors, non_cfa_authors = classify_authors(authors_affiliations)
-            
+
             return generate_summary(
-                client=openai_client,
+                client=self.openai_client,
                 title=paper.get('title', ''),
                 abstract=paper.get('abstract', ''),
                 year=paper.get('year', ''),
@@ -284,32 +291,34 @@ class GoogleDocsCreator:
         except HttpError as error:
             print(f'An error occurred adding content: {error}')
             return None
-    
 
 
 def main() -> None:
     """Main function to create Google Doc with CfA papers."""
     print("CfA Science Highlights - Google Docs Creator")
     print("=" * 50)
-    
+
     # Check for credentials file
     if not os.path.exists('credentials.json'):
         _print_setup_instructions()
         return
-    
+
+    # Initialize environment and API clients
+    ads_api_token, openai_client = setup_environment()
+
     # Initialize Google Docs creator
-    docs_creator = GoogleDocsCreator()
-    
+    docs_creator = GoogleDocsCreator(openai_client)
+
     print("Authenticating with Google...")
     if not docs_creator.authenticate():
         print("Authentication failed. Please check your credentials.")
         return
-    
+
     # Fetch papers
-    papers = _fetch_papers()
+    papers = _fetch_papers(ads_api_token)
     if not papers:
         return
-    
+
     # Process document
     document_id = _process_document(docs_creator, papers)
     if document_id:
@@ -329,13 +338,14 @@ def _print_setup_instructions() -> None:
     print("6. Run this script again")
 
 
-def _fetch_papers() -> Optional[List[Dict[str, Any]]]:
+def _fetch_papers(ads_api_token: str) -> Optional[List[Dict[str, Any]]]:
     """Fetch papers from NASA ADS with user preferences."""
     first_author_only, refereed_only = get_search_preferences()
-    
+
     print("Fetching papers from NASA ADS...")
     try:
         papers = fetch_abstracts(
+            ads_api_token=ads_api_token,
             first_author_only=first_author_only,
             refereed_only=refereed_only
         )
@@ -353,8 +363,7 @@ def _fetch_papers() -> Optional[List[Dict[str, Any]]]:
 def _process_document(docs_creator: GoogleDocsCreator, papers: List[Dict[str, Any]]) -> Optional[str]:
     """Process the Google Doc with paper content."""
     print("Getting static Google Doc...")
-    doc_title = "Recent CfA-affiliated Science Publications"
-    document_id = docs_creator.get_or_create_static_document(doc_title)
+    document_id = docs_creator.get_or_create_static_document(DEFAULT_DOC_TITLE)
     
     if not document_id:
         print("Failed to get or create document")
@@ -375,13 +384,12 @@ def _process_document(docs_creator: GoogleDocsCreator, papers: List[Dict[str, An
 def _print_success_summary(docs_creator: GoogleDocsCreator, document_id: str, papers: List[Dict[str, Any]]) -> None:
     """Print success summary with document details."""
     doc_url = f"https://docs.google.com/document/d/{document_id}/edit"
-    doc_title = "Recent CfA-affiliated Science Publications"
-    
+
     now = datetime.now()
     timestamp = now.strftime("Generated on %A, %B %d, %Y at %I:%M%p")
-    
+
     print(f"\n✅ Success! Google Doc updated with abstracts and AI summaries:")
-    print(f"📄 Title: {doc_title}")
+    print(f"📄 Title: {DEFAULT_DOC_TITLE}")
     print(f"🕒 {timestamp}")
     print(f"🔗 Static URL: {doc_url}")
     print(f"📊 Papers included: {len(papers)}")

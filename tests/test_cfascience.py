@@ -193,7 +193,7 @@ class TestPrintAuthorsAffiliations:
 
 class TestFetchAbstracts:
     """Test the fetch_abstracts function."""
-    
+
     @patch('cfascience.requests.get')
     def test_fetch_abstracts_successful_response(self, mock_get):
         """Test successful API response handling."""
@@ -218,9 +218,9 @@ class TestFetchAbstracts:
             }
         }
         mock_get.return_value = mock_response
-        
-        result = fetch_abstracts()
-        
+
+        result = fetch_abstracts(ads_api_token="test_token")
+
         assert len(result) == 1
         assert result[0]["title"] == "Test Paper Title"
         assert result[0]["abstract"] == "This is a test abstract"
@@ -228,12 +228,12 @@ class TestFetchAbstracts:
         assert result[0]["bibcode"] == "2025TestJ...1..123S"
         assert result[0]["arxiv_id"] == "2501.12345"
         assert len(result[0]["authors_affiliations"]) == 1
-        
+
         # Verify API was called with correct parameters
         mock_get.assert_called_once()
         call_args = mock_get.call_args
         assert "https://api.adsabs.harvard.edu/v1/search/query" in call_args[0]
-    
+
     @patch('cfascience.requests.get')
     def test_fetch_abstracts_empty_response(self, mock_get):
         """Test handling of empty API response."""
@@ -241,11 +241,11 @@ class TestFetchAbstracts:
         mock_response.raise_for_status.return_value = None
         mock_response.json.return_value = {"response": {"docs": []}}
         mock_get.return_value = mock_response
-        
-        result = fetch_abstracts()
-        
+
+        result = fetch_abstracts(ads_api_token="test_token")
+
         assert result == []
-    
+
     @patch('cfascience.requests.get')
     def test_fetch_abstracts_missing_fields(self, mock_get):
         """Test handling of documents with missing fields."""
@@ -262,9 +262,9 @@ class TestFetchAbstracts:
             }
         }
         mock_get.return_value = mock_response
-        
-        result = fetch_abstracts()
-        
+
+        result = fetch_abstracts(ads_api_token="test_token")
+
         assert len(result) == 1
         assert result[0]["title"] == "Minimal Paper"
         assert result[0]["abstract"] == ""
@@ -272,97 +272,95 @@ class TestFetchAbstracts:
         assert result[0]["bibcode"] == ""
         assert result[0]["arxiv_id"] is None
         assert result[0]["authors_affiliations"] == []
-    
+
     @patch('cfascience.requests.get')
     def test_fetch_abstracts_http_error(self, mock_get):
         """Test handling of HTTP errors."""
         mock_response = Mock()
         mock_response.raise_for_status.side_effect = Exception("HTTP Error")
         mock_get.return_value = mock_response
-        
+
         with pytest.raises(Exception):
-            fetch_abstracts()
+            fetch_abstracts(ads_api_token="test_token")
 
 
 class TestSummarizeAbstracts:
     """Test the summarize_abstracts function."""
-    
-    @patch('cfascience.client')
+
     @patch('cfascience.threading.Thread')
     @patch('cfascience.threading.Event')
-    def test_summarize_single_abstract(self, mock_event, mock_thread, mock_client):
+    def test_summarize_single_abstract(self, mock_event, mock_thread):
         """Test summarizing a single abstract."""
         # Setup mocks
         mock_event_instance = Mock()
         mock_event.return_value = mock_event_instance
-        
+
         mock_thread_instance = Mock()
         mock_thread.return_value = mock_thread_instance
-        
+
+        mock_client = Mock()
         mock_response = Mock()
         mock_response.choices = [Mock()]
         mock_response.choices[0].message.content = "This is a test summary."
         mock_client.chat.completions.create.return_value = mock_response
-        
+
         abstracts = [
             {
                 "title": "Test Paper",
-                "year": "2025", 
+                "year": "2025",
                 "abstract": "Test abstract content"
             }
         ]
-        
-        result = summarize_abstracts(abstracts)
-        
+
+        result = summarize_abstracts(abstracts, mock_client)
+
         assert len(result) == 1
         assert result[0]["title"] == "Test Paper"
         assert result[0]["year"] == "2025"
         assert result[0]["summary"] == "This is a test summary."
-        
+
         # Verify OpenAI API was called correctly
         mock_client.chat.completions.create.assert_called_once()
         call_args = mock_client.chat.completions.create.call_args
         assert call_args[1]["model"] == "gpt-4o"
         assert call_args[1]["max_tokens"] == 400
         assert call_args[1]["temperature"] == 0.7
-    
-    @patch('cfascience.client')
+
     @patch('cfascience.threading.Thread')
     @patch('cfascience.threading.Event')
-    def test_summarize_multiple_abstracts(self, mock_event, mock_thread, mock_client):
+    def test_summarize_multiple_abstracts(self, mock_event, mock_thread):
         """Test summarizing multiple abstracts."""
         # Setup mocks
         mock_event_instance = Mock()
         mock_event.return_value = mock_event_instance
-        
+
         mock_thread_instance = Mock()
         mock_thread.return_value = mock_thread_instance
-        
+
+        mock_client = Mock()
         mock_response = Mock()
         mock_response.choices = [Mock()]
         mock_response.choices[0].message.content = "Test summary."
         mock_client.chat.completions.create.return_value = mock_response
-        
+
         abstracts = [
             {"title": "Paper 1", "year": "2025", "abstract": "Abstract 1"},
             {"title": "Paper 2", "year": "2024", "abstract": "Abstract 2"}
         ]
-        
-        result = summarize_abstracts(abstracts)
-        
+
+        result = summarize_abstracts(abstracts, mock_client)
+
         assert len(result) == 2
         assert result[0]["title"] == "Paper 1"
         assert result[1]["title"] == "Paper 2"
         # Verify API was called twice (once per abstract)
         assert mock_client.chat.completions.create.call_count == 2
-    
-    @patch('cfascience.client')
-    @patch('cfascience.threading.Thread')
-    @patch('cfascience.threading.Event')
-    def test_summarize_with_empty_list(self, mock_event, mock_thread, mock_client):
+
+    def test_summarize_with_empty_list(self):
         """Test summarizing with empty abstracts list."""
-        result = summarize_abstracts([])
-        
+        mock_client = Mock()
+        result = summarize_abstracts([], mock_client)
+
         assert result == []
         # API should not be called
         mock_client.chat.completions.create.assert_not_called()
@@ -436,7 +434,7 @@ class TestClassifyAuthors:
 
 class TestArXivIntegration:
     """Test ArXiv ID extraction and processing."""
-    
+
     @patch('cfascience.requests.get')
     def test_arxiv_id_extraction(self, mock_get):
         """Test extraction of ArXiv IDs from identifier field."""
@@ -458,12 +456,12 @@ class TestArXivIntegration:
             }
         }
         mock_get.return_value = mock_response
-        
-        result = fetch_abstracts()
-        
+
+        result = fetch_abstracts(ads_api_token="test_token")
+
         assert len(result) == 1
         assert result[0]["arxiv_id"] == "2501.12345"
-    
+
     @patch('cfascience.requests.get')
     def test_no_arxiv_id(self, mock_get):
         """Test handling when no ArXiv ID is present."""
@@ -474,7 +472,7 @@ class TestArXivIntegration:
                 "docs": [
                     {
                         "title": ["Paper without ArXiv"],
-                        "abstract": "Test abstract", 
+                        "abstract": "Test abstract",
                         "year": "2025",
                         "identifier": ["doi:10.1234/example"],
                         "bibcode": "2025TestJ...1..123B",
@@ -485,9 +483,9 @@ class TestArXivIntegration:
             }
         }
         mock_get.return_value = mock_response
-        
-        result = fetch_abstracts()
-        
+
+        result = fetch_abstracts(ads_api_token="test_token")
+
         assert len(result) == 1
         assert result[0]["arxiv_id"] is None
 
